@@ -3,6 +3,7 @@ import Stripe
 import StripePaymentSheet
 
 struct BuyNowView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let resalePost: ResalePostDTO
     @Binding var event: Event
     let userEmail: String
@@ -27,7 +28,7 @@ struct BuyNowView: View {
             if isEventLoaded {
                 VStack(spacing: 30) {
                     VStack(spacing: 10) {
-                        Text("Buy Ticket")
+                        Text(lang == "es" ? "Comprar Entrada" : "Buy Ticket")
                             .font(.largeTitle.bold())
                             .foregroundColor(.white)
 
@@ -35,28 +36,32 @@ struct BuyNowView: View {
                             .font(.title2)
                             .foregroundColor(.white.opacity(0.8))
 
-                        Text("From \(resalePost.sellerName)")
+                        Text(
+                            lang == "es"
+                                ? "De \(resalePost.sellerName)"
+                                : "From \(resalePost.sellerName)"
+                        )
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.5))
                     }
 
                     Text(String(format: "$%.2f", resalePost.price))
                         .font(.system(size: 48, weight: .black))
-                        .foregroundColor(.neonGreen)
+                        .foregroundColor(.gold)
 
                     if isLoading {
-                        ProgressView("Loading Payment Sheet...")
+                        ProgressView(lang == "es" ? "Cargando Pantalla de Pago..." : "Loading Payment Sheet...")
                             .foregroundColor(.white)
                     } else {
                         Button {
                             paymentSheet == nil ? startCheckout() : presentPaymentSheet()
                         } label: {
-                            Text("Pay Now")
+                            Text(lang == "es" ? "Pagar Ahora" : "Pay Now")
                                 .font(.headline)
                                 .foregroundColor(.black)
                                 .padding()
                                 .frame(maxWidth: .infinity)
-                                .background(Color.neonGreen)
+                                .background(Color.gold)
                                 .cornerRadius(14)
                         }
                     }
@@ -65,7 +70,7 @@ struct BuyNowView: View {
                 }
                 .padding()
             } else {
-                ProgressView("Loading Event...")
+                ProgressView(lang == "es" ? "Cargando Evento..." : "Loading Event...")
                     .foregroundColor(.white)
             }
 
@@ -88,9 +93,9 @@ struct BuyNowView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 80, height: 80)
-                        .foregroundColor(.neonGreen)
+                        .foregroundColor(.gold)
 
-                    Text("Purchase Successful!")
+                    Text(lang == "es" ? "¡Compra Exitosa!" : "Purchase Successful!")
                         .font(.title2.bold())
                         .foregroundColor(.white)
                 }
@@ -110,7 +115,7 @@ struct BuyNowView: View {
     private func fetchEventDetails() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
-        let url = URL(string: "http://localhost:8080/events/\(resalePost.eventId)")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(resalePost.eventId)")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -134,7 +139,7 @@ struct BuyNowView: View {
     private func startCheckout() {
         isLoading = true
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/api/resale/pay/\(resalePost.id)") else {
+              let url = URL(string: "https://backendevent-etce.onrender.com/api/resale/pay/\(resalePost.id)") else {
             self.isLoading = false
             self.errorMessage = "Invalid request"
             self.showError = true
@@ -162,7 +167,7 @@ struct BuyNowView: View {
                 var config = PaymentSheet.Configuration()
                 config.merchantDisplayName = "WKND Events"
                 config.customer = .init(id: result.customerId, ephemeralKeySecret: result.ephemeralKey)
-                config.primaryButtonColor = UIColor(Color.neonGreen)
+                config.primaryButtonColor = UIColor(Color.gold)
 
                 DispatchQueue.main.async {
                     self.paymentSheet = PaymentSheet(paymentIntentClientSecret: result.clientSecret, configuration: config)
@@ -233,7 +238,7 @@ struct BuyNowView: View {
             return
         }
 
-        let url = URL(string: "http://localhost:8080/api/resale/confirm-transfer/\(resalePost.id)")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/api/resale/confirm-transfer/\(resalePost.id)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -263,7 +268,7 @@ struct BuyNowView: View {
             return
         }
 
-        let url = URL(string: "http://localhost:8080/api/tickets/my?email=\(userEmail)")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/my?email=\(userEmail)")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

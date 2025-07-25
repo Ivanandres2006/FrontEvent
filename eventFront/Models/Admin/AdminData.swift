@@ -3,7 +3,10 @@ struct AdminUser: Identifiable, Codable {
     let email: String
     let firstName: String
     let lastName: String
+    let role: String
+    var canCreateEvents: Bool
 }
+
 
 struct AdminEvent: Identifiable, Codable {
     let id: Int

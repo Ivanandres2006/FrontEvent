@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PostCreationView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var userSession: UserSession
 
@@ -25,22 +26,35 @@ struct PostCreationView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     if viewModel.tickets.isEmpty {
-                        Text("You don't have any tickets for active events right now.")
-                            .foregroundColor(.white.opacity(0.8))
+                        Text(
+                            lang == "es"
+                                ? "No tienes entradas para eventos activos en este momento."
+                                : "You don't have any tickets for active events right now."
+                        )
+                        .foregroundColor(.white.opacity(0.8))
                             .multilineTextAlignment(.center)
                             .padding(.top, 60)
                     } else if availableTickets.isEmpty {
-                        Text("All your tickets are already posted for resale.")
-                            .foregroundColor(.white.opacity(0.8))
+                        Text(
+                            lang == "es"
+                                ? "Todas tus entradas ya están publicadas para reventa."
+                                : "All your tickets are already posted for resale."
+                        )
+                        .foregroundColor(.white.opacity(0.8))
                             .multilineTextAlignment(.center)
                             .padding(.top, 60)
                     } else {
-                        Text("🎟 Tickets Available: \(availableTickets.count)")
-                            .foregroundColor(.white)
+
+                        Text(
+                            lang == "es"
+                                ? "🎟 Entradas Disponibles: \(availableTickets.count)"
+                                : "🎟 Tickets Available: \(availableTickets.count)"
+                        )
+                        .foregroundColor(.white)
 
                         headerView
                         dropdownView
-                        CustomTextField(placeholder: "Price (USD)", text: $price, keyboardType: .decimalPad)
+                        CustomTextField(    placeholder: lang == "es" ? "Precio (USD)" : "Price (USD)", text: $price, keyboardType: .decimalPad)
                         submitButton
                         errorTextView
                     }
@@ -64,7 +78,7 @@ struct PostCreationView: View {
     }
 
     var headerView: some View {
-        Text("Create Resale Post")
+        Text(lang == "es" ? "Crear Publicación de Reventa" : "Create Resale Post")
             .font(.largeTitle.bold())
             .foregroundColor(.white)
             .padding(.top)
@@ -72,21 +86,25 @@ struct PostCreationView: View {
 
     var dropdownView: some View {
         let options = availableTickets.map {
-            let label = "\($0.eventTitle ?? "Untitled Event") - \($0.tierName ?? "Unnamed Tier")"
+            let label = "\($0.eventTitle ?? (lang == "es" ? "Evento Sin Título" : "Untitled Event")) - \($0.tierName ?? (lang == "es" ? "Nivel Sin Nombre" : "Unnamed Tier"))"
             print("📦 Option: \(label)")
             return label
         }
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text("Select Ticket")
+            Text(lang == "es" ? "Selecciona Entrada" : "Select Ticket")
                 .foregroundColor(.white.opacity(0.7))
 
-            CustomDropdown(label: "Choose a Ticket", selection: $selectedTicketLabel, options: options)
-                .id(UUID())
+            CustomDropdown(
+                label: lang == "es" ? "Elige una Entrada" : "Choose a Ticket",
+                selection: $selectedTicketLabel,
+                options: options
+            )
+            .id(UUID())
                 .onChange(of: selectedTicketLabel) { label in
                     print("🟢 Selected Label: \(label)")
                     if let ticket = availableTickets.first(where: {
-                        let match = "\($0.eventTitle ?? "Untitled Event") - \($0.tierName ?? "Unnamed Tier")"
+                        let match = "\($0.eventTitle ?? (lang == "es" ? "Evento Sin Título" : "Untitled Event")) - \($0.tierName ?? (lang == "es" ? "Nivel Sin Nombre" : "Unnamed Tier"))"
                         return match == label
                     }) {
                         print("✅ Ticket matched: ID \(ticket.id)")
@@ -95,7 +113,7 @@ struct PostCreationView: View {
                         if price.isEmpty { price = "10.00" }
                     } else {
                         print("❌ No ticket matched")
-                        errorMessage = "Ticket not matched."
+                        errorMessage = lang == "es" ? "Entrada no encontrada." : "Ticket not matched."
                     }
                 }
         }
@@ -108,15 +126,15 @@ struct PostCreationView: View {
                     .progressViewStyle(CircularProgressViewStyle(tint: .black))
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.neonGreen)
+                    .background(Color.gold)
                     .cornerRadius(12)
             } else {
-                Text("Post Ticket")
+                Text(lang == "es" ? "Publicar Entrada" : "Post Ticket")
                     .font(.headline)
                     .foregroundColor(.black)
                     .padding()
                     .frame(maxWidth: .infinity)
-                    .background(Color.neonGreen)
+                    .background(Color.gold)
                     .cornerRadius(12)
             }
         }
@@ -161,7 +179,7 @@ struct PostCreationView: View {
     func createPost() {
         guard let token = TokenManager.shared.getAccessToken(),
               let ticketId = selectedTicketId,
-              let url = URL(string: "http://localhost:8080/resale/create"),
+              let url = URL(string: "https://backendevent-etce.onrender.com/resale/create"),
               let priceValue = Double(price) else {
             withAnimation { errorMessage = "Invalid input" }
             return
@@ -191,7 +209,7 @@ struct PostCreationView: View {
                     dismiss()
                 } else {
                     withAnimation {
-                        errorMessage = "Failed to create post"
+                        errorMessage = lang == "es" ? "No se pudo crear la publicación" : "Failed to create post"
                     }
                 }
             }

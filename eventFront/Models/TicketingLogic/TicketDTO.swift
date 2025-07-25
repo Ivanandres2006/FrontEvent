@@ -10,7 +10,16 @@ struct TicketDTO: Identifiable, Codable {
     let eventId: Int
     let resold: Bool
 
+    let buyerFirstName: String
+    let buyerLastName: String
+    let buyerUsername: String
+    let buyerEmail: String
+    var paid: Bool
+    let paymentMethod: String
+
     enum CodingKeys: String, CodingKey {
         case id, quantity, status, qrCodeUrl, tierName, eventTitle, eventId, resold
+        case buyerFirstName, buyerLastName, buyerUsername, buyerEmail, paid, paymentMethod
     }
 }
+

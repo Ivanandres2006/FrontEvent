@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ForgotPasswordView: View {
     @Environment(\.dismiss) var dismiss
+    @AppStorage("selectedLanguage") var lang: String = "en"
 
     @State private var email = ""
     @State private var message = ""
@@ -18,7 +19,7 @@ struct ForgotPasswordView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("🔐 Forgot Password")
+                    Text(lang == "es" ? "🔐 Olvidaste la contraseña" : "🔐 Forgot Password")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -27,7 +28,7 @@ struct ForgotPasswordView: View {
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: animate)
 
                     VStack(spacing: 16) {
-                        CustomInputField(icon: "envelope", placeholder: "Enter your email", text: $email, keyboard: .emailAddress)
+                        CustomInputField(icon: "envelope", placeholder: lang == "es" ? "Entra tu correo electronico" : "Enter your email", text: $email, keyboard: .emailAddress)
                     }
                     .padding()
                     .background(Color.white.opacity(0.05))
@@ -46,14 +47,14 @@ struct ForgotPasswordView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.gold))
                     } else {
-                        Button("Send Reset Code") {
+                        Button(lang == "es" ? "Enviar código de reinicio" : "Send Reset Code") {
                             sendResetCode()
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.neonGreen)
+                        .background(Color.gold)
                         .foregroundColor(.black)
                         .cornerRadius(12)
                         .opacity(animate ? 1.0 : 0)
@@ -102,7 +103,7 @@ struct ForgotPasswordView: View {
     }
 
     func sendResetCode() {
-        guard let url = URL(string: "http://localhost:8080/auth/forgot-password") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/forgot-password") else { return }
 
         let body: [String: Any] = ["email": email]
         let jsonData = try? JSONSerialization.data(withJSONObject: body)

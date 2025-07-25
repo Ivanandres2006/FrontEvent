@@ -5,6 +5,8 @@ struct ProfileView: View {
     @EnvironmentObject var userSession: UserSession
     @AppStorage("isLoggedIn") var isLoggedIn = false
     @AppStorage("hasPassword") var hasPassword = false
+    @AppStorage("selectedLanguage") var lang: String = "en"
+    
 
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var photos: [UIImage] = []
@@ -16,12 +18,14 @@ struct ProfileView: View {
             ZStack {
                 LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
+                
+                
 
                 ScrollView {
                     VStack(spacing: 30) {
                         Spacer()
 
-                        Text("👤 My Profile")
+                        Text(lang == "es" ? "👤 Mi perfil" : "👤 My Profile")
                             .font(.largeTitle)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
@@ -45,13 +49,28 @@ struct ProfileView: View {
                         .cornerRadius(20)
                         .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.1)))
                         .padding(.horizontal)
+                        
+                        VStack(alignment: .leading, spacing: 20) {
+                                        Text("Language")
+                                            .font(.title2.bold())
+                                            .foregroundColor(.white)
+
+                                        CustomDropdown(
+                                            label: "Select Language",
+                                            selection: $lang,
+                                            options: ["en", "es"]
+                                        )
+
+                                        Spacer()
+                                    }
+                                    .padding()
 
                         PhotosPicker(selection: $selectedItem, matching: .images) {
                             Text("Upload Event Photo")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.neonGreen)
+                                .background(Color.gold)
                                 .foregroundColor(.black)
                                 .cornerRadius(12)
                         }
@@ -130,4 +149,56 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
     }
+    
+    struct CustomDropdown: View {
+        var label: String
+        @Binding var selection: String
+        var options: [String]
+
+        @State private var isExpanded = false
+
+        var body: some View {
+            VStack(spacing: 4) {
+                Button(action: {
+                    withAnimation { isExpanded.toggle() }
+                }) {
+                    HStack {
+                        Text(selection.isEmpty ? label : selection)
+                            .foregroundColor(selection.isEmpty ? .gray : .white)
+                        Spacer()
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.08))
+                    .cornerRadius(12)
+                }
+
+                if isExpanded {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            ForEach(options, id: \.self) { option in
+                                Button(action: {
+                                    selection = option
+                                    isExpanded = false
+                                }) {
+                                    Text(option)
+                                        .foregroundColor(.white)
+                                        .padding(.vertical, 8)
+                                        .padding(.horizontal)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(selection == option ? Color.white.opacity(0.1) : Color.clear)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 150)
+                    .background(Color.white.opacity(0.05))
+                    .cornerRadius(12)
+                    .shadow(radius: 4)
+                }
+            }
+        }
+    }
+
 }

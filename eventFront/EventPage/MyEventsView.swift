@@ -1,13 +1,15 @@
 import SwiftUI
 
 struct MyEventsView: View {
+    @Binding var allEvents: [Event]
+    @Binding var userActiveEventIds: Set<Int>
+    @AppStorage("selectedLanguage") var lang: String = "en"
+
     @State private var selectedTab: Tab = .myEvents
-    @State private var allEvents: [Event] = []
     @State private var selectedEvent: Event? = nil  // ✅ added
     @EnvironmentObject var userSession: UserSession
     @State private var animate = false
     
-    @State private var userActiveEventIds: Set<Int> = []
 
     enum Tab {
         case myEvents
@@ -24,10 +26,10 @@ struct MyEventsView: View {
                     VStack(alignment: .leading, spacing: 24) {
                         // 🔘 Tab buttons
                         HStack {
-                            TabButton(title: "My Events", isSelected: selectedTab == .myEvents) {
+                            TabButton(title: lang == "es" ? "Mis Eventos" : "My Events", isSelected: selectedTab == .myEvents) {
                                 selectedTab = .myEvents
                             }
-                            TabButton(title: "Created Events", isSelected: selectedTab == .createdEvents) {
+                            TabButton(title: lang == "es" ? "Eventos Creados" : "Created Events", isSelected: selectedTab == .createdEvents) {
                                 selectedTab = .createdEvents
                             }
                         }
@@ -36,18 +38,18 @@ struct MyEventsView: View {
                         if selectedTab == .myEvents {
                             // Attending
                             let attending = futureAttendingEvents()
-                            SectionHeader(icon: "clock.fill", title: "Attending", color: .cyan)
+                            SectionHeader(icon: "clock.fill", title: lang == "es" ? "Atentiendo":"Attending", color: .cyan)
                             if attending.isEmpty {
-                                emptyMessage("You haven’t joined any upcoming events.")
+                                emptyMessage(lang == "es" ? "No has unido a ninguna evento proximo" : "You haven’t joined any upcoming events.")
                             } else {
                                 EventList(events: attending, selectedEvent: $selectedEvent) // ✅
                             }
 
                             // Attended
                             let attended = pastAttendingEvents()
-                            SectionHeader(icon: "checkmark.circle.fill", title: "Attended", color: .green)
+                            SectionHeader(icon: "checkmark.circle.fill", title: lang == "es" ? "Asistio" : "Attended", color: .green)
                             if attended.isEmpty {
-                                emptyMessage("You haven’t attended any events yet.")
+                                emptyMessage(lang == "es" ? "No has ido a ningun evento": "You haven’t attended any events yet.")
                             } else {
                                 EventList(events: attended, selectedEvent: $selectedEvent) // ✅
                             }
@@ -55,18 +57,18 @@ struct MyEventsView: View {
                         } else {
                             // Future Created
                             let future = futureCreatedEvents()
-                            SectionHeader(icon: "calendar.badge.plus", title: "Future Created", color: .mint)
+                            SectionHeader(icon: "calendar.badge.plus", title:lang == "es" ? "Creaciones Futuras": "Future Created", color: .mint)
                             if future.isEmpty {
-                                emptyMessage("You haven’t created any upcoming events.")
+                                emptyMessage(lang == "es" ? "No has creado ningun proximo evento ": "You haven’t created any upcoming events.")
                             } else {
                                 EventList(events: future, selectedEvent: $selectedEvent) // ✅
                             }
 
                             // Past Created
                             let past = pastCreatedEvents()
-                            SectionHeader(icon: "clock.arrow.circlepath", title: "Past Created", color: .orange)
+                            SectionHeader(icon: "clock.arrow.circlepath", title: lang == "es" ? "Creaciones Pasadas": "Past Created", color: .orange)
                             if past.isEmpty {
-                                emptyMessage("No past created events.")
+                                emptyMessage(lang == "es" ? "No hay eventos creados en el pasado": "No past created events.")
                             } else {
                                 EventList(events: past, selectedEvent: $selectedEvent) // ✅
                             }
@@ -79,11 +81,12 @@ struct MyEventsView: View {
                     fetchAllEvents()
                 }
             }
-            .navigationTitle("My Events")
+            .navigationTitle(lang == "es" ? "Mis eventos": "My Events")
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
+                print("👤 userSession.id = \(userSession.userId)")
+                    print("📧 userSession.email = \(userSession.email)")
                 animate = true
-                fetchAllEvents()
             }
             .sheet(item: $selectedEvent) { event in
                 EventDetailView(event: event, allEvents: $allEvents)
@@ -108,23 +111,49 @@ struct MyEventsView: View {
 
     private func futureCreatedEvents() -> [Event] {
         let now = Date()
-        return allEvents.filter {
-            $0.createdByEmail?.lowercased() == userSession.email.lowercased() && ($0.dateAsDate ?? now) >= now
+        var matching: [Event] = []
+
+        for event in allEvents {
+            let byId = event.createdBy?.id == userSession.userId
+            let byEmail = event.createdByEmail?.lowercased() == userSession.email.lowercased()
+            let isReunionGuest = (event.type == "reunion") &&
+                (event.reunionGuests?.contains(where: {
+                    $0.email.lowercased() == userSession.email.lowercased()
+                }) == true)
+            let isFuture = (event.dateAsDate ?? now) >= now
+            print("🕒 \(event.title): dateTime = \(event.dateTime), parsed = \(event.dateAsDate)")
+
+            print("🔍 \(event.title): byId=\(byId), byEmail=\(byEmail), isReunionGuest=\(isReunionGuest), isFuture=\(isFuture)")
+
+            if (byId || byEmail || isReunionGuest), isFuture {
+                matching.append(event)
+            }
         }
+
+        print("✅ total matched: \(matching.count)")
+        return matching
     }
+
+
 
     private func pastCreatedEvents() -> [Event] {
         let now = Date()
         return allEvents.filter {
-            $0.createdByEmail?.lowercased() == userSession.email.lowercased() && ($0.dateAsDate ?? now) < now
+            (($0.createdBy?.id == userSession.userId) ||
+             ($0.createdByEmail?.lowercased() == userSession.email.lowercased()) ||
+             ($0.type == "reunion" && $0.reunionGuests?.contains(where: {
+                 $0.email.lowercased() == userSession.email.lowercased()
+             }) == true))
+            && ($0.dateAsDate ?? now) < now
         }
     }
+
 
     func fetchAllEvents() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
         // Fetch event IDs where user has PAID tickets
-        if let eventIdsUrl = URL(string: "http://localhost:8080/api/tickets/my-event-ids") {
+        if let eventIdsUrl = URL(string: "https://backendevent-etce.onrender.com/api/tickets/my-event-ids") {
             var request = URLRequest(url: eventIdsUrl)
             request.httpMethod = "GET"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -133,14 +162,31 @@ struct MyEventsView: View {
                 if let data = data,
                    let ids = try? JSONDecoder().decode([Int].self, from: data) {
                     DispatchQueue.main.async {
+                        // First: fetch ticket-based IDs
                         self.userActiveEventIds = Set(ids)
+
+                        // Then: fetch RSVP-based IDs
+                        if let rsvpUrl = URL(string: "https://backendevent-etce.onrender.com/events/rsvp-attending") {
+                            var rsvpRequest = URLRequest(url: rsvpUrl)
+                            rsvpRequest.httpMethod = "GET"
+                            rsvpRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+                            URLSession.shared.dataTask(with: rsvpRequest) { rsvpData, _, _ in
+                                if let rsvpData = rsvpData,
+                                   let rsvpIds = try? JSONDecoder().decode([Int].self, from: rsvpData) {
+                                    DispatchQueue.main.async {
+                                        self.userActiveEventIds.formUnion(rsvpIds)
+                                    }
+                                }
+                            }.resume()
+                        }
                     }
                 }
             }.resume()
         }
 
         // Fetch all events
-        if let url = URL(string: "http://localhost:8080/events?page=0&size=100") {
+        if let url = URL(string: "https://backendevent-etce.onrender.com/events?page=0&size=100") {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -149,7 +195,11 @@ struct MyEventsView: View {
                 guard let data = data else { return }
                 if let decoded = try? JSONDecoder().decode(PaginatedResponse<Event>.self, from: data) {
                     DispatchQueue.main.async {
-                        self.allEvents = decoded.content
+                        DispatchQueue.main.async {
+                            let existingIds = Set(self.allEvents.map { $0.id })
+                            let newEvents = decoded.content.filter { !existingIds.contains($0.id) }
+                            self.allEvents.append(contentsOf: newEvents)
+                        }
                     }
                 }
             }.resume()
@@ -218,7 +268,7 @@ struct TabButton: View {
                 .foregroundColor(isSelected ? .black : .white)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 20)
-                .background(isSelected ? Color.neonGreen : Color.clear)
+                .background(isSelected ? Color.gold : Color.clear)
                 .cornerRadius(14)
                 .overlay(
                     RoundedRectangle(cornerRadius: 14)

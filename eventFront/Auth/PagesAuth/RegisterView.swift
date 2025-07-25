@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RegisterView: View {
     @AppStorage("isLoggedIn", store: UserDefaults.standard) private var isLoggedIn = false
+    @AppStorage("selectedLanguage") var lang: String = "en"
+    
     @State private var firstName = ""
     @State private var lastName = ""
     @State private var username = ""
@@ -26,7 +28,7 @@ struct RegisterView: View {
                     VStack(spacing: 32) {
                         Spacer()
 
-                        Text("Step \(currentStep + 1) of 4")
+                        Text(lang == "es" ? "Paso \(currentStep + 1) de 4" : "Step \(currentStep + 1) of 4")
                             .foregroundColor(.gray)
                             .font(.subheadline)
 
@@ -54,14 +56,18 @@ struct RegisterView: View {
                         Spacer()
 
                         if isLoading {
-                            ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .neonGreen))
+                            ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .gold))
                         } else {
                             Button(action: handleNext) {
-                                Text(currentStep == 3 ? "Register" : "Next")
+                                Text(
+                                    currentStep == 3
+                                    ? (lang == "es" ? "Registrarse" : "Register")
+                                    : (lang == "es" ? "Siguiente" : "Next")
+                                )
                                     .fontWeight(.bold)
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(isCurrentStepValid ? Color.neonGreen : Color.gray)
+                                    .background(isCurrentStepValid ? Color.gold : Color.gray)
                                     .foregroundColor(.black)
                                     .cornerRadius(12)
                             }
@@ -80,48 +86,48 @@ struct RegisterView: View {
 
     var stepOne: some View {
         VStack(spacing: 16) {
-            Text("What's your name?")
+            Text(lang == "es" ? "Cual es tu nombre?" : "What's your name?")
                 .font(.title.bold())
                 .foregroundColor(.white)
 
-            CustomInputField(icon: "person", placeholder: "First Name", text: $firstName)
-            CustomInputField(icon: "person", placeholder: "Last Name", text: $lastName)
-            CustomInputField(icon: "person.text.rectangle", placeholder: "Username", text: $username)
+            CustomInputField(icon: "person", placeholder: lang == "es" ? "Primer Nombre" :"First Name", text: $firstName)
+            CustomInputField(icon: "person", placeholder: lang == "es" ? "Apellido" : "Last Name", text: $lastName)
+                             CustomInputField(icon: "person.text.rectangle", placeholder: lang == "es" ? "Nombre de Usuario" : "Username", text: $username)
         }
     }
 
     var stepTwo: some View {
         VStack(spacing: 16) {
-            Text("How can we contact you?")
+            Text(lang == "es" ? "Como te podemos contactar" : "How can we contact you?")
                 .font(.title.bold())
                 .foregroundColor(.white)
 
-            CustomInputField(icon: "envelope", placeholder: "Email", text: $email, keyboard: .emailAddress)
-            CustomInputField(icon: "phone", placeholder: "Phone", text: $phone, keyboard: .phonePad)
+            CustomInputField(icon: "envelope", placeholder: lang == "es" ? "Correo Electronico" : "Email", text: $email, keyboard: .emailAddress)
+            CustomInputField(icon: "phone", placeholder: lang == "es" ? "Numero Telefonico" : "Phone", text: $phone, keyboard: .phonePad)
         }
     }
 
     var stepThree: some View {
         VStack(spacing: 16) {
-            Text("Create a password")
+            Text(lang == "es" ? "Crea una clave" : "Create a password")
                 .font(.title.bold())
                 .foregroundColor(.white)
 
-            CustomInputField(icon: "lock", placeholder: "Password", text: $password, isSecure: true)
+            CustomInputField(icon: "lock", placeholder: lang == "es" ? "Clave" : "Password", text: $password, isSecure: true)
         }
     }
 
     var stepFour: some View {
         VStack(spacing: 12) {
-            Text("Review and Confirm")
+            Text(lang == "es" ? "Revisa y Confirma" : "Review and Confirm")
                 .font(.title.bold())
                 .foregroundColor(.white)
 
             Group {
-                summaryRow("Name", "\(firstName) \(lastName)")
-                summaryRow("Username", username)
-                summaryRow("Email", email)
-                summaryRow("Phone", phone)
+                summaryRow(lang == "es" ? "Nombre" : "Name", "\(firstName) \(lastName)")
+                summaryRow(lang == "es" ? "Nombre de Usuario" : "Username", username)
+                summaryRow(lang == "es" ? "Correo Electronico" :"Email", email)
+                summaryRow(lang == "es" ? "Numero Telefonico" : "Phone", phone)
             }
         }
     }
@@ -152,7 +158,7 @@ struct RegisterView: View {
     }
 
     func registerUser() {
-        guard let url = URL(string: "http://localhost:8080/auth/register") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/register") else { return }
 
         let body: [String: Any] = [
             "firstName": firstName,

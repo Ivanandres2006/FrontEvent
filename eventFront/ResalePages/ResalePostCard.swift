@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ResalePostCard: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let post: ResalePostDTO
     var onMessage: () -> Void = {}
     var onBuyNow: () -> Void = {}
@@ -54,14 +55,14 @@ struct ResalePostCard: View {
 
                 Text("$\(String(format: "%.2f", post.price))")
                     .font(.title2.bold())
-                    .foregroundColor(.neonGreen)
+                    .foregroundColor(.gold)
                     .padding(.top, 4)
             }
 
             // 🔘 Actions
             HStack {
                 Button(action: onMessage) {
-                    Label("Message", systemImage: "message.fill")
+                    Label(lang == "es" ? "Mensaje" : "Message", systemImage: "message.fill")
                         .font(.subheadline.bold())
                         .foregroundColor(.white)
                         .padding(.vertical, 8)
@@ -73,12 +74,12 @@ struct ResalePostCard: View {
                 Spacer()
 
                 Button(action: onBuyNow) {
-                    Label("Buy Now", systemImage: "cart.fill")
+                    Label(lang == "es" ? "Comprar Ahora" : "Buy Now", systemImage: "cart.fill")
                         .font(.subheadline.bold())
                         .foregroundColor(.black)
                         .padding(.vertical, 8)
                         .padding(.horizontal, 16)
-                        .background(Color.neonGreen)
+                        .background(Color.gold)
                         .cornerRadius(10)
                 }
             }

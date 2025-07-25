@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PromoterAnalyticsView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let eventId: Int
     @Environment(\.dismiss) var dismiss
 
@@ -16,7 +17,7 @@ struct PromoterAnalyticsView: View {
 
                 VStack {
                     HStack {
-                        Button("Close") {
+                        Button(lang == "es" ? "Cerrar" : "Close") {
                             dismiss()
                         }
                         .foregroundColor(.neonGreen)
@@ -28,7 +29,7 @@ struct PromoterAnalyticsView: View {
 
                     if isLoading {
                         Spacer()
-                        ProgressView("Loading stats...")
+                        ProgressView(lang == "es" ? "Cargando estadísticas..." : "Loading stats...")
                             .tint(.neonGreen)
                             .padding()
                         Spacer()
@@ -38,12 +39,12 @@ struct PromoterAnalyticsView: View {
                                 if let p = promoterEvent {
                                     // Stats Card
                                     VStack(alignment: .leading, spacing: 10) {
-                                        Text("🎯 Your Promoter Stats")
+                                        Text(lang == "es" ? "🎯 Tus Estadísticas como Promotor" : "🎯 Your Promoter Stats")
                                             .font(.title.bold())
                                             .foregroundColor(.white)
 
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Username")
+                                            Text(lang == "es" ? "Usuario" : "Username")
                                                 .font(.caption)
                                                 .foregroundColor(.gray)
 
@@ -56,7 +57,7 @@ struct PromoterAnalyticsView: View {
                                         }
                                         
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Referral Link")
+                                            Text(lang == "es" ? "Enlace de Referencia" : "Referral Link")
                                                 .font(.caption)
                                                 .foregroundColor(.gray)
 
@@ -74,7 +75,7 @@ struct PromoterAnalyticsView: View {
                                             }) {
                                                 HStack(spacing: 4) {
                                                     Image(systemName: "doc.on.doc")
-                                                    Text("Copy Link")
+                                                    Text(lang == "es" ? "Copiar Enlace" : "Copy Link")
                                                 }
                                                 .font(.footnote)
                                                 .foregroundColor(.neonGreen)
@@ -82,7 +83,7 @@ struct PromoterAnalyticsView: View {
                                         }
 
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text("Tickets Sold")
+                                            Text(lang == "es" ? "Entradas Vendidas" : "Tickets Sold")
                                                 .font(.caption)
                                                 .foregroundColor(.gray)
 
@@ -101,12 +102,12 @@ struct PromoterAnalyticsView: View {
 
                                     // Buyers
                                     if buyers.isEmpty {
-                                        Text("No referred buyers yet.")
+                                        Text(lang == "es" ? "Aún no hay compradores referidos." : "No referred buyers yet.")
                                             .foregroundColor(.gray)
                                             .padding(.top, 12)
                                             .frame(maxWidth: .infinity, alignment: .center)
                                     } else {
-                                        Text("🧾 Referred Buyers")
+                                        Text(lang == "es" ? "🧾 Compradores Referidos" : "🧾 Referred Buyers")
                                             .font(.headline)
                                             .foregroundColor(.white)
 
@@ -134,7 +135,7 @@ struct PromoterAnalyticsView: View {
                                     }
 
                                 } else {
-                                    Text("No stats available.")
+                                    Text(lang == "es" ? "No hay estadísticas disponibles." : "No stats available.")
                                         .foregroundColor(.gray)
                                         .frame(maxWidth: .infinity, alignment: .center)
                                 }
@@ -153,7 +154,7 @@ struct PromoterAnalyticsView: View {
     func fetchStats() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
-        let url = URL(string: "http://localhost:8080/api/promoters/my-stats")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/api/promoters/my-stats")!
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
@@ -178,7 +179,7 @@ struct PromoterAnalyticsView: View {
     func fetchBuyers(promoterId: Int) {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
-        let url = URL(string: "http://localhost:8080/api/promoters/event/\(eventId)/promoter/\(promoterId)/buyers")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/api/promoters/event/\(eventId)/promoter/\(promoterId)/buyers")!
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 

@@ -111,11 +111,31 @@ struct AdminView: View {
 
     private func adminUserRow(_ user: AdminUser) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(user.email).bold()
-                Text("\(user.firstName) \(user.lastName)").font(.subheadline).opacity(0.8)
+                Text("\(user.firstName) \(user.lastName)")
+                    .font(.subheadline)
+                    .opacity(0.8)
+                Text("Role: \(user.role)")
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
+
             Spacer()
+
+            Toggle(isOn: Binding(
+                get: { user.canCreateEvents },
+                set: { newValue in
+                    updateEventPermission(for: user.id, to: newValue)
+                }
+            )) {
+                Text("Can Create Events")
+                    .font(.caption2)
+            }
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .padding(.trailing, 4)
+
             Button(role: .destructive) {
                 deleteUser(id: user.id)
             } label: {
@@ -126,6 +146,24 @@ struct AdminView: View {
         .background(Color.white.opacity(0.08))
         .cornerRadius(12)
     }
+    
+    private func updateEventPermission(for userId: Int, to value: Bool) {
+        guard let token = TokenManager.shared.getAccessToken(),
+              let url = URL(string: "https://backendevent-etce.onrender.com/admin/user/\(userId)/permission?allow=\(value)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            DispatchQueue.main.async {
+                loadData() // ✅ optionally refresh
+            }
+        }.resume()
+    }
+
+
+
 
     private func adminEventRow(_ event: AdminEvent) -> some View {
         let isOversold = event.soldTickets > event.totalTickets
@@ -177,10 +215,10 @@ struct AdminView: View {
                     }
 
                     Text(String(format: "Revenue: $%.2f", event.totalRevenue))
-                        .foregroundColor(.neonGreen)
+                        .foregroundColor(.gold)
 
                     ProgressView(value: soldPercent, total: 100)
-                        .tint(isOversold ? .red : .neonGreen)
+                        .tint(isOversold ? .red : .gold)
 
                     Text(String(format: "%.0f%% of tickets sold", soldPercent))
                         .font(.footnote)
@@ -194,7 +232,7 @@ struct AdminView: View {
                             .foregroundColor(.black)
                             .padding(.vertical, 8)
                             .frame(maxWidth: .infinity)
-                            .background(Color.neonGreen)
+                            .background(Color.gold)
                             .cornerRadius(10)
                             .padding(.top, 8)
                     }
@@ -398,7 +436,7 @@ private func SkeletonEventRow() -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Divider().background(Color.white.opacity(0.2))
             Text("📊 Analytics")
-            ProgressView(value: 0.5).tint(.neonGreen)
+            ProgressView(value: 0.5).tint(.gold)
         }
     }
     .padding()

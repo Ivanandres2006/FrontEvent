@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ResetPasswordView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let email: String
     let code: String
 
@@ -19,7 +20,7 @@ struct ResetPasswordView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("🔒 Reset Password")
+                    Text(lang == "es" ? "🔒 Reiniciar Clave": "🔒 Reset Password")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -28,8 +29,8 @@ struct ResetPasswordView: View {
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: animate)
 
                     VStack(spacing: 16) {
-                        SecureInputField(placeholder: "New Password", text: $newPassword)
-                        SecureInputField(placeholder: "Confirm Password", text: $confirmPassword)
+                        SecureInputField(placeholder: lang == "es" ? "Nueva Clave": "New Password", text: $newPassword)
+                        SecureInputField(placeholder: lang == "es" ? "Confirmar Clave":  "Confirm Password", text: $confirmPassword)
                     }
                     .padding()
                     .background(Color.white.opacity(0.05))
@@ -48,14 +49,14 @@ struct ResetPasswordView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.gold))
                     } else {
-                        Button("Reset Password") {
+                        Button(lang == "es" ? "Reiniciar Clave": "Reset Password") {
                             resetPassword()
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.neonGreen)
+                        .background(Color.gold)
                         .foregroundColor(.black)
                         .cornerRadius(12)
                         .opacity(animate ? 1.0 : 0)
@@ -87,7 +88,7 @@ struct ResetPasswordView: View {
             return
         }
 
-        guard let url = URL(string: "http://localhost:8080/auth/reset-password") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/reset-password") else { return }
 
         let body: [String: Any] = [
             "email": email,

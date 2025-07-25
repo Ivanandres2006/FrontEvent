@@ -3,6 +3,7 @@ import SwiftUI
 struct EmailVerificationView: View {
     let email: String
     @AppStorage("isLoggedIn") private var isLoggedIn = false
+    @AppStorage("selectedLanguage") var lang: String = "en"
     
     @State private var code = ""
     @State private var message = ""
@@ -25,12 +26,12 @@ struct EmailVerificationView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 80, height: 80)
-                        .foregroundColor(.neonGreen)
+                        .foregroundColor(.gold)
                         .scaleEffect(animate ? 1.0 : 0.7)
                         .opacity(animate ? 1.0 : 0)
                         .animation(.easeOut(duration: 0.6), value: animate)
 
-                    Text("Verify Your Email")
+                    Text(lang == "es" ? "Verifique su correo electrónico" : "Verify Your Email")
                         .font(.title)
                         .fontWeight(.bold)
                         .foregroundColor(.white)
@@ -39,7 +40,7 @@ struct EmailVerificationView: View {
                         .offset(y: animate ? 0 : -10)
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: animate)
 
-                    Text("We sent a code to:")
+                    Text(lang == "es" ? "Te enviamos un codigo a:": "We sent a code to:")
                         .foregroundColor(.gray)
                         .font(.subheadline)
 
@@ -48,7 +49,7 @@ struct EmailVerificationView: View {
                         .font(.body)
                         .multilineTextAlignment(.center)
 
-                    TextField("Enter verification code", text: $code)
+                    TextField(lang == "es" ? "Introduzca el código de verificación" : "Enter verification code", text: $code)
                         .padding()
                         .background(Color.white.opacity(0.08))
                         .cornerRadius(10)
@@ -58,19 +59,23 @@ struct EmailVerificationView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .gold))
                     } else {
-                        Button("Verify Email") {
+                        Button(lang == "es" ? "Verificar correo electrónico" : "Verify Email") {
                             verifyCode()
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.neonGreen)
+                        .background(Color.gold)
                         .foregroundColor(.black)
                         .cornerRadius(12)
 
-                        Button(resendCooldown > 0 ? "Resend in \(resendCooldown)s..." : "Resend Code") {
+                        Button {
                             resendCode()
+                        } label: {
+                            Text(resendCooldown > 0
+                                 ? (lang == "es" ? "Reenviar en \(resendCooldown)s..." : "Resend in \(resendCooldown)s...")
+                                 : (lang == "es" ? "Reenviar código" : "Resend Code"))
                         }
                         .disabled(!canResend)
                         .foregroundColor(canResend ? .gray : .gray.opacity(0.5))
@@ -98,7 +103,7 @@ struct EmailVerificationView: View {
     }
 
     func verifyCode() {
-        guard let url = URL(string: "http://localhost:8080/auth/verify") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/verify") else { return }
 
         let body: [String: Any] = [
             "email": email,
@@ -157,7 +162,7 @@ struct EmailVerificationView: View {
             }
         }
 
-        guard let url = URL(string: "http://localhost:8080/auth/resend") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/resend") else { return }
 
         let body: [String: Any] = [
             "email": email,

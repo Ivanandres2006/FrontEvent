@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct VerifyResetCodeView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let email: String
 
     @State private var code = ""
@@ -18,7 +19,7 @@ struct VerifyResetCodeView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("✉️ Enter Reset Code")
+                    Text(lang == "es" ? "✉️ Ingrese el código de reinicio" : "✉️ Enter Reset Code")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -27,7 +28,7 @@ struct VerifyResetCodeView: View {
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: animate)
 
                     VStack(spacing: 8) {
-                        Text("We sent a verification code to:")
+                        Text(lang == "es" ? "Te enviamos un código de verificación a: " : "We sent a verification code to:")
                             .foregroundColor(.gray)
                             .font(.subheadline)
 
@@ -36,7 +37,7 @@ struct VerifyResetCodeView: View {
                             .foregroundStyle(.white)
                             .fontWeight(.medium)
 
-                        TextField("Enter code", text: $code)
+                        TextField(lang == "es" ? "Introducir código" : "Enter code", text: $code)
                             .padding()
                             .background(Color.white.opacity(0.08))
                             .cornerRadius(10)
@@ -61,14 +62,14 @@ struct VerifyResetCodeView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.gold))
                     } else {
-                        Button("Verify Code") {
+                        Button(lang == "es" ? "Código de verificación" : "Verify Code") {
                             verifyCode()
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.neonGreen)
+                        .background(Color.gold)
                         .foregroundColor(.black)
                         .cornerRadius(12)
                         .opacity(animate ? 1.0 : 0)
@@ -89,7 +90,7 @@ struct VerifyResetCodeView: View {
     }
 
     func verifyCode() {
-        guard let url = URL(string: "http://localhost:8080/auth/verify-reset-code") else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/verify-reset-code") else { return }
 
         let body: [String: Any] = [
             "email": email,

@@ -37,7 +37,7 @@ class TokenManager {
             return
         }
 
-        var request = URLRequest(url: URL(string: "http://localhost:8080/auth/validate")!)
+        var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/auth/validate")!)
         request.httpMethod = "GET"
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
 
@@ -61,7 +61,7 @@ class TokenManager {
             return
         }
 
-        var request = URLRequest(url: URL(string: "http://localhost:8080/auth/refresh")!)
+        var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/auth/refresh")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let body = ["refreshToken": refreshToken]

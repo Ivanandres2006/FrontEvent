@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct CityEventsView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let city: String
     @Binding var allEvents: [Event]
 
@@ -15,7 +16,7 @@ struct CityEventsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     // 🏷 Title
-                    Text("\(city) Events")
+                    Text(lang == "es" ? "Eventos en \(city)" : "\(city) Events")
                         .font(.largeTitle.bold())
                         .foregroundColor(.white)
                         .padding(.horizontal)

@@ -4,6 +4,7 @@ struct SetPasswordView: View {
     @AppStorage("isLoggedIn") var isLoggedIn = false
     @AppStorage("hasPassword") var hasPassword = false
     @AppStorage("hasUsername") private var hasUsername = false
+    @AppStorage("selectedLanguage") var lang: String = "en"
 
     @State private var newPassword = ""
     @State private var confirmPassword = ""
@@ -20,7 +21,7 @@ struct SetPasswordView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("🔐 Set Password")
+                    Text(lang == "es" ? "🔐 Establecer contraseña": "🔐 Set Password")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -31,13 +32,13 @@ struct SetPasswordView: View {
                     VStack(spacing: 16) {
                         CustomInputField(
                             icon: "lock",
-                            placeholder: "New Password",
+                            placeholder: lang == "es" ? "Nueva Clave": "New Password",
                             text: $newPassword,
                             isSecure: true
                         )
                         CustomInputField(
                             icon: "lock.fill",
-                            placeholder: "Confirm Password",
+                            placeholder: lang == "es" ? "Confirma la clave": "Confirm Password",
                             text: $confirmPassword,
                             isSecure: true
                         )
@@ -59,14 +60,14 @@ struct SetPasswordView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .gold))
                     } else {
                         Button(action: setPassword) {
-                            Text("Save Password")
+                            Text(lang == "es" ? "Guarda la contraseña": "Save Password")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.neonGreen)
+                                .background(Color.gold)
                                 .foregroundColor(.black)
                                 .cornerRadius(12)
                         }
@@ -98,7 +99,7 @@ struct SetPasswordView: View {
         isLoading = true
         message = ""
 
-        let url = URL(string: "http://localhost:8080/auth/set-password")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/auth/set-password")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

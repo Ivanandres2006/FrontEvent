@@ -11,6 +11,7 @@ struct TicketTierEditable: Identifiable {
 
 struct EditEventView: View {
     @Environment(\.dismiss) var dismiss
+    @AppStorage("selectedLanguage") var lang: String = "en"
 
     var event: Event
     var onSave: (Event) -> Void
@@ -50,13 +51,13 @@ struct EditEventView: View {
                 LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
                 
                 if isSaving{
-                    ProgressView("Saving...")
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .neonGreen))
+                    ProgressView(lang == "es" ? "Guardando..." : "Saving...")
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .gold))
                                     .scaleEffect(1.5)
                 }else{
                     ScrollView {
                         VStack(spacing: 24) {
-                            Text("\u{1F6E0} Edit Event")
+                            Text(lang == "es" ? "\u{1F6E0} Editar Evento" : "\u{1F6E0} Edit Event")
                                 .font(.largeTitle.bold())
                                 .foregroundColor(.white)
                                 .padding(.top)
@@ -76,7 +77,7 @@ struct EditEventView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(lang == "es" ? "Cancelar" : "Cancel") { dismiss() }
                         .foregroundColor(.white.opacity(0.8))
                 }
             }
@@ -91,17 +92,17 @@ struct EditEventView: View {
                 AsyncImage(url: url) { image in image.resizable().scaledToFit() } placeholder: { ProgressView() }
                     .frame(height: 180).cornerRadius(12)
             }
-            Button("Change Image") { showImagePicker = true }
-                .foregroundColor(.neonGreen)
+            Button(lang == "es" ? "Cambiar Imagen" : "Change Image") { showImagePicker = true }
+                .foregroundColor(.gold)
         }
     }
 
     private var inputFieldsSection: some View {
         VStack(spacing: 16) {
-            CustomInputField(icon: "textformat", placeholder: "Title", text: $title)
-            CustomMultilineField(icon: "doc.text", title: "Description", text: $description)
-            CustomInputField(icon: "mappin", placeholder: "Location", text: $location)
-            CustomInputField(icon: "location.fill", placeholder: "Address", text: $address)
+            CustomInputField(icon: "textformat", placeholder: lang == "es" ? "Titulo": "Title", text: $title)
+            CustomMultilineField(icon: "doc.text", title: lang == "es" ? "Descripcion": "Description", text: $description)
+            CustomInputField(icon: "mappin", placeholder: lang == "es" ? "Ubicacion": "Location", text: $location)
+            CustomInputField(icon: "location.fill", placeholder: lang == "es" ? "Direccion": "Address", text: $address)
             CustomDatePicker(date: $date)
             if !message.isEmpty {
                 Text(message).foregroundColor(.red).font(.footnote)
@@ -113,7 +114,7 @@ struct EditEventView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 8) {
                 Image(systemName: "ticket.fill").foregroundColor(.white)
-                Text("Ticket Tiers").font(.title3.bold()).foregroundColor(.white)
+                Text(lang == "es" ? "Niveles de entradas": "Ticket Tiers").font(.title3.bold()).foregroundColor(.white)
             }
 
             ForEach(ticketTiers.indices, id: \.self) { index in
@@ -123,8 +124,8 @@ struct EditEventView: View {
             Button {
                 ticketTiers.append(TicketTierEditable(id: 0, name: "", price: 0.0, quantity: 0, forceOpen: false))
             } label: {
-                Label("Add Tier", systemImage: "plus.circle.fill")
-                    .foregroundColor(.neonGreen)
+                Label(lang == "es" ? "Agregar nivel": "Add Tier", systemImage: "plus.circle.fill")
+                    .foregroundColor(.gold)
             }
         }
     }
@@ -133,13 +134,17 @@ struct EditEventView: View {
         Button(action: updateEvent) {
             HStack {
                 Spacer()
-                Text(isSaving ? "Saving..." : "Save Changes")
+                Text(
+                    isSaving
+                    ? (lang == "es" ? "Guardando..." : "Saving...")
+                    : (lang == "es" ? "Guardar cambios" : "Save Changes")
+                )
                     .foregroundColor(.black)
                     .fontWeight(.bold)
                     .padding(.vertical, 12)
                 Spacer()
             }
-            .background(isSaving ? Color.gray : Color.neonGreen)
+            .background(isSaving ? Color.gray : Color.gold)
             .cornerRadius(16)
         }
         .disabled(isSaving)
@@ -150,11 +155,11 @@ struct EditEventView: View {
         Button(role: .destructive) {
             showDeleteDialog = true
         } label: {
-            Text("Delete Event").fontWeight(.semibold).foregroundColor(.red).padding(.vertical, 10).frame(maxWidth: .infinity)
+            Text(lang == "es" ? "Borrar Evento": "Delete Event").fontWeight(.semibold).foregroundColor(.red).padding(.vertical, 10).frame(maxWidth: .infinity)
         }
-        .confirmationDialog("Are you sure you want to delete this event?", isPresented: $showDeleteDialog, titleVisibility: .visible) {
-            Button("Delete", role: .destructive, action: deleteEvent)
-            Button("Cancel", role: .cancel) {}
+        .confirmationDialog(lang == "es" ? "Seguro que quiere borrar este evento?": "Are you sure you want to delete this event?", isPresented: $showDeleteDialog, titleVisibility: .visible) {
+            Button(lang == "es" ? "Borrar": "Delete", role: .destructive, action: deleteEvent)
+            Button(lang == "es" ? "Cancelar": "Cancel", role: .cancel) {}
         }
     }
 
@@ -164,7 +169,7 @@ struct EditEventView: View {
             return
         }
 
-        let url = URL(string: "http://localhost:8080/events/\(event.id)")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -192,7 +197,7 @@ struct EditEventView: View {
         message = ""
 
         let formattedDate = Self.formatDate(date)
-        let url = URL(string: "http://localhost:8080/events/\(event.id)")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)")!
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -259,34 +264,37 @@ struct EditEventView: View {
 }
 
 private struct TicketTierEditor: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     @Binding var tier: TicketTierEditable
     @State private var isToggling = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(tier.name.isEmpty ? "New Tier" : tier.name)
+                Text(tier.name.isEmpty
+                     ? (lang == "es" ? "Nuevo Nivel" : "New Tier")
+                     : tier.name)
                     .font(.headline).foregroundColor(.white)
                 Spacer()
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Name").foregroundColor(.gray)
-                TextField("Tier name", text: $tier.name)
+                Text(lang == "es" ? "Nombre" : "Name").foregroundColor(.gray)
+                TextField(lang == "es" ? "Nombre del nivel" :"Tier name", text: $tier.name)
                     .padding().background(Color.white.opacity(0.08)).cornerRadius(12).foregroundColor(.white)
             }
 
             HStack(spacing: 12) {
                 VStack(alignment: .leading) {
-                    Text("Price").foregroundColor(.gray)
-                    TextField("Price", value: $tier.price, formatter: NumberFormatter.currency)
+                    Text(lang == "es" ? "Precio" :"Price").foregroundColor(.gray)
+                    TextField(lang == "es" ? "Precio" :"Price", value: $tier.price, formatter: NumberFormatter.currency)
                         .keyboardType(.decimalPad)
                         .padding().background(Color.white.opacity(0.08)).cornerRadius(12).foregroundColor(.white)
                 }
 
                 VStack(alignment: .leading) {
-                    Text("Quantity").foregroundColor(.gray)
-                    TextField("Qty", value: $tier.quantity, formatter: NumberFormatter())
+                    Text(lang == "es" ? "Cantidad" :"Quantity").foregroundColor(.gray)
+                    TextField(lang == "es" ? "Cantidad" :"Qty", value: $tier.quantity, formatter: NumberFormatter())
                         .keyboardType(.numberPad)
                         .padding().background(Color.white.opacity(0.08)).cornerRadius(12).foregroundColor(.white)
                 }
@@ -295,12 +303,15 @@ private struct TicketTierEditor: View {
             Button {
                 toggleForceOpen()
             } label: {
-                Label(tier.forceOpen ? "Close Tier" : "Open Now",
+                Label(
+                    tier.forceOpen
+                        ? (lang == "es" ? "Cerrar Nivel" : "Close Tier")
+                        : (lang == "es" ? "Abrir Ahora" : "Open Now"),
                       systemImage: tier.forceOpen ? "lock.fill" : "bolt.fill")
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
-                    .background(tier.forceOpen ? Color.red.opacity(0.2) : Color.neonGreen.opacity(0.15))
-                    .foregroundColor(tier.forceOpen ? .red : .neonGreen)
+                    .background(tier.forceOpen ? Color.red.opacity(0.2) : Color.gold.opacity(0.15))
+                    .foregroundColor(tier.forceOpen ? .red : .gold)
                     .cornerRadius(10)
             }
             .disabled(isToggling)
@@ -312,7 +323,7 @@ private struct TicketTierEditor: View {
         guard let token = TokenManager.shared.getAccessToken() else { return }
         isToggling = true
 
-        let urlStr = "http://localhost:8080/api/tickets/tier/\(tier.id)/" + (tier.forceOpen ? "force-close" : "force-open")
+        let urlStr = "https://backendevent-etce.onrender.com/api/tickets/tier/\(tier.id)/" + (tier.forceOpen ? "force-close" : "force-open")
         guard let url = URL(string: urlStr) else { return }
 
         var request = URLRequest(url: url)

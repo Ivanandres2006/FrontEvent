@@ -39,7 +39,7 @@ struct EventCardViewWithHighlight: View {
             // 📍 Location
             HStack {
                 Image(systemName: "mappin.circle.fill")
-                    .foregroundColor(.neonGreen)
+                    .foregroundColor(.gold)
                 Text(event.location)
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.85))

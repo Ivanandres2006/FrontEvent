@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TicketValidationViewForScanner: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let eventId: Int
 
     @State private var scannedCode: String?
@@ -38,7 +39,7 @@ struct TicketValidationViewForScanner: View {
     }
 
     private func validateTicket(_ code: String) {
-        guard let url = URL(string: "http://localhost:8080/api/tickets/validate/\(code)"),
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(code)"),
               let token = TokenManager.shared.getAccessToken() else { return }
 
         var request = URLRequest(url: url)
@@ -52,20 +53,25 @@ struct TicketValidationViewForScanner: View {
 
                     if json.used {
                         resultColor = .red
-                        resultText = "❌ Already used\nTier: \(json.tier)"
+                        resultText = lang == "es"
+                            ? "❌ Ya utilizada\nNivel: \(json.tier)"
+                            : "❌ Already used\nTier: \(json.tier)"
                     } else {
                         markTicketAsUsed(ticketId: json.ticketId, tier: json.tier)
                     }
                 } else {
                     resultColor = .red
-                    resultText = "🚫 Invalid or wrong event ticket"
+
+                    resultText = lang == "es"
+                        ? "🚫 Entrada inválida o de evento incorrecto"
+                        : "🚫 Invalid or wrong event ticket"
                 }
             }
         }.resume()
     }
 
     private func markTicketAsUsed(ticketId: Int, tier: String) {
-        guard let url = URL(string: "http://localhost:8080/api/tickets/validate/\(ticketId)/mark-used"),
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(ticketId)/mark-used"),
               let token = TokenManager.shared.getAccessToken() else { return }
 
         var request = URLRequest(url: url)
@@ -78,14 +84,21 @@ struct TicketValidationViewForScanner: View {
                    let response = try? JSONDecoder().decode(MarkUsedResponse.self, from: data),
                    response.status == "Ticket marked as used" {
                     resultColor = .green
-                    resultText = "✅ Ticket scanned\nTier: \(tier)"
+                    resultText = lang == "es"
+                        ? "✅ Entrada escaneada\nNivel: \(tier)"
+                        : "✅ Ticket scanned\nTier: \(tier)"
                 } else {
                     resultColor = .red
-                    resultText = "❌ Failed to mark as used"
+                    resultText = lang == "es"
+                        ? "❌ No se pudo marcar como utilizada"
+                        : "❌ Failed to mark as used"
                 }
 
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    resultText = "Scan a QR code"
+
+                    resultText = lang == "es"
+                        ? "Escanea un código QR"
+                        : "Scan a QR code"
                     resultColor = .gray
                     shouldRestartScanner.toggle()
                 }

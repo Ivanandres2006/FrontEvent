@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 
 struct EventAnalyticsView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     let eventId: Int
     @State private var analytics: EventAnalyticsDTO?
     @State private var isLoading = true
@@ -15,7 +16,7 @@ struct EventAnalyticsView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     if let data = analytics {
-                        Text("Analytics for \(data.title)")
+                        Text(lang == "es" ? "Analíticas de \(data.title)" : "Analytics for \(data.title)")
                             .font(.title)
                             .bold()
                             .foregroundColor(.white)
@@ -24,10 +25,10 @@ struct EventAnalyticsView: View {
                         salesChart(data)
                         tierPieChart(data)
                     } else if isLoading {
-                        ProgressView("Loading analytics...")
+                        ProgressView(lang == "es" ? "Cargando analíticas..." : "Loading analytics...")
                             .foregroundColor(.white)
                     } else if let error = errorMessage {
-                        Text("Error: \(error)")
+                        Text(lang == "es" ? "Error: \(error)" : "Error: \(error)")
                             .foregroundColor(.red)
                     }
                 }
@@ -42,9 +43,20 @@ struct EventAnalyticsView: View {
     @ViewBuilder
     private func statsSection(_ data: EventAnalyticsDTO) -> some View {
         HStack(spacing: 16) {
-            statCard(title: "Sold", value: "\(data.totalTicketsSold)")
-            statCard(title: "Left", value: "\(data.totalTicketsAvailable)")
-            statCard(title: "Revenue", value: "$\(Int(data.revenue))")
+            statCard(
+                title: lang == "es" ? "Vendidos" : "Sold",
+                value: "\(data.totalTicketsSold)"
+            )
+
+            statCard(
+                title: lang == "es" ? "Disponibles" : "Left",
+                value: "\(data.totalTicketsAvailable)"
+            )
+
+            statCard(
+                title: lang == "es" ? "Ingresos" : "Revenue",
+                value: "$\(Int(data.revenue))"
+            )
         }
     }
 
@@ -66,7 +78,7 @@ struct EventAnalyticsView: View {
 
     private func salesChart(_ data: EventAnalyticsDTO) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Sales Over Time")
+            Text(lang == "es" ? "Ventas a lo Largo del Tiempo" : "Sales Over Time")
                 .foregroundColor(.white)
                 .font(.headline)
 
@@ -83,7 +95,7 @@ struct EventAnalyticsView: View {
 
     private func tierPieChart(_ data: EventAnalyticsDTO) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Ticket Tier Breakdown")
+            Text(lang == "es" ? "Desglose por Nivel de Entradas" : "Ticket Tier Breakdown")
                 .foregroundColor(.white)
                 .font(.headline)
 
@@ -97,7 +109,7 @@ struct EventAnalyticsView: View {
 
     private func fetchAnalytics() {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/events/\(eventId)/analytics") else {
+              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)/analytics") else {
             self.errorMessage = "Invalid URL or token"
             self.isLoading = false
             return

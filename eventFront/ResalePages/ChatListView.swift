@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChatListView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     @EnvironmentObject var userSession: UserSession
     @Environment(\.dismiss) var dismiss
 
@@ -9,22 +10,43 @@ struct ChatListView: View {
     @State private var selectedPost: ChatRoomSummary?
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-
+        ZStack(alignment: .top) {
+            // Background gradient
+            LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // ✅ Custom Top Bar (Only Back Button)
+                HStack {
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.white)
+                    }
+                    Spacer()
+                }
+                .padding(.top, 40) // notch safe area
+                .padding(.horizontal)
+                .padding(.bottom, 20) // spacing from content
+                
+                // ✅ Content
                 if isLoading {
-                    ProgressView("Loading Chats...")
+                    Spacer()
+                    ProgressView(lang == "es" ? "Cargando Chats..." : "Loading Chats...")
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    Spacer()
                 } else if chatPosts.isEmpty {
+                    Spacer()
                     VStack(spacing: 12) {
                         Image(systemName: "bubble.left.and.bubble.right.fill")
                             .font(.system(size: 40))
                             .foregroundColor(.white.opacity(0.5))
-                        Text("No active chats found")
+                        Text(lang == "es" ? "No se encontraron chats activos" : "No active chats found")
                             .foregroundColor(.white.opacity(0.7))
                     }
+                    Spacer()
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 20) {
@@ -35,9 +57,9 @@ struct ChatListView: View {
                                     HStack(spacing: 12) {
                                         ZStack(alignment: .topTrailing) {
                                             Image(systemName: "ticket.fill")
-                                                .foregroundColor(.neonGreen)
+                                                .foregroundColor(.gold)
                                                 .font(.title2)
-
+                                            
                                             if let unread = post.unreadMessages, unread > 0 {
                                                 Text("\(unread)")
                                                     .font(.caption2.bold())
@@ -50,18 +72,22 @@ struct ChatListView: View {
                                                     .animation(.spring(), value: unread)
                                             }
                                         }
-
+                                        
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(post.title)
                                                 .font(.headline)
                                                 .foregroundColor(.white)
-                                            Text("With \(post.sellerName)")
-                                                .font(.subheadline)
+                                            Text(
+                                                lang == "es"
+                                                    ? "Con \(post.sellerName)"
+                                                    : "With \(post.sellerName)"
+                                            )
+                                            .font(.subheadline)
                                                 .foregroundColor(.white.opacity(0.6))
                                         }
-
+                                        
                                         Spacer()
-
+                                        
                                         Image(systemName: "chevron.right")
                                             .foregroundColor(.white.opacity(0.3))
                                     }
@@ -71,25 +97,24 @@ struct ChatListView: View {
                                 }
                             }
                         }
-                        .padding()
+                        .padding(.horizontal)
+                        .padding(.bottom, 12)
                     }
                 }
             }
-            .navigationTitle("Chats")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear(perform: fetchChats)
-            .sheet(item: $selectedPost) { post in
-                ChatView(
-                    chatSummary: post,
-                    currentUserId: userSession.userId ?? 0
-                )
-            }
+        }
+        .onAppear(perform: fetchChats)
+        .fullScreenCover(item: $selectedPost) { post in
+            ChatView(
+                chatSummary: post,
+                currentUserId: userSession.userId ?? 0
+            )
         }
     }
 
     func fetchChats() {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/chat/my") else {
+              let url = URL(string: "https://backendevent-etce.onrender.com/chat/my") else {
             self.isLoading = false
             return
         }

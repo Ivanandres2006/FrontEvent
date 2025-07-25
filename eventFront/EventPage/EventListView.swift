@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct EventListView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     @Binding var events: [Event]
     @Binding var selectedTab: Int
 
@@ -13,6 +14,10 @@ struct EventListView: View {
 
     @State private var selectedCity: CitySelection? = nil
     @State private var selectedEvent: Event? = nil
+    
+    @State private var showDirectChats = false
+    
+    @State private var reunionToRsvp: Event? = nil
 
     var body: some View {
         NavigationStack {
@@ -22,14 +27,31 @@ struct EventListView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
-                        Text("Welcome, \(userSession.firstName)")
-                            .font(.largeTitle.bold())
-                            .foregroundColor(.white)
-                            .padding(.horizontal)
+                        
+                        HStack{
+                            Text(lang == "es" ? "Bienvenido, \(userSession.firstName)" :"Welcome, \(userSession.firstName)")
+                                .font(.largeTitle.bold())
+                                .foregroundColor(.white)
+                                .padding(.horizontal)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                    showDirectChats = true
+                                }) {
+                                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                                        .font(.title2)
+                                        .padding(10)
+                                        .background(Color.white.opacity(0.15))
+                                        .clipShape(Circle())
+                                        .foregroundColor(.white)
+                                }
+                        }
+                        .padding(.horizontal)
 
                         // Popular Events
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Popular Events")
+                            Text(lang == "es" ? "Eventos":"Events")
                                 .font(.title2.bold())
                                 .foregroundColor(.white)
                                 .padding(.horizontal)
@@ -43,7 +65,7 @@ struct EventListView: View {
 
                         // Cities
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Cities")
+                            Text(lang == "es" ? "Ciudad" : "Cities")
                                 .font(.title2.bold())
                                 .foregroundColor(.white)
                                 .padding(.horizontal)
@@ -62,6 +84,7 @@ struct EventListView: View {
                 }
             }
             .onAppear {
+                print("📥 EventListView received events count: \(events.count)")
                 if events.isEmpty {
                     fetchEvents(reset: true)
                 }
@@ -72,9 +95,24 @@ struct EventListView: View {
                 }
                 previousTab = newTab
             }
-            .onChange(of: events.count) { _ in
-                currentPage = 0
-                hasMore = true
+            
+        
+            .fullScreenCover(isPresented: $showDirectChats) {
+                NavigationStack {
+                    DirectChatListView()
+                        .environmentObject(userSession)
+                }
+            }
+            .sheet(item: $reunionToRsvp) { reunion in
+                ReunionRSVPView(
+                    eventId: reunion.id,
+                    title: reunion.title,
+                    location: reunion.location,
+                    dateTime: reunion.dateTime,
+                    onComplete: {
+                        reunionToRsvp = nil
+                    }
+                )
             }
             .sheet(item: $selectedEvent) { event in
                 EventDetailView(event: event, allEvents: $events)
@@ -95,7 +133,7 @@ struct EventListView: View {
             Image(systemName: "calendar.badge.exclamationmark")
                 .font(.system(size: 50))
                 .foregroundColor(.white.opacity(0.5))
-            Text("No upcoming events")
+            Text(lang == "es" ? "No hay futuros eventos": "No upcoming events")
                 .foregroundColor(.white.opacity(0.6))
         }
         .frame(maxWidth: .infinity)
@@ -138,7 +176,7 @@ struct EventListView: View {
             Image(systemName: "building.2.crop.circle")
                 .font(.system(size: 50))
                 .foregroundColor(.white.opacity(0.5))
-            Text("No cities found")
+            Text(lang == "es" ? "No hay ciudades encontradas" : "No cities found")
                 .foregroundColor(.white.opacity(0.6))
         }
         .frame(maxWidth: .infinity)
@@ -162,15 +200,23 @@ struct EventListView: View {
     // MARK: - Helpers
 
     var upcomingEvents: [Event] {
-        let today = Date()
+        let now = Date()
         let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone.current
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
 
-        return events.filter {
-            guard let eventDate = formatter.date(from: $0.dateTime) else { return false }
-            return eventDate >= today
+        return events.filter { event in
+            //print("📆 Raw dateTime: \(event.dateTime)")
+
+            guard let eventDate = formatter.date(from: event.dateTime) else {
+                //print("❌ Failed to parse: \(event.dateTime)")
+                return false
+            }
+
+            let isFuture = eventDate >= now
+            //print("✅ Parsed: \(eventDate), isFuture: \(isFuture)")
+            return isFuture
         }
     }
 
@@ -203,7 +249,7 @@ struct EventListView: View {
         let pageSize = 50
 
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/events?page=\(currentPage)&size=\(pageSize)") else {
+              let url = URL(string: "https://backendevent-etce.onrender.com/events?page=\(currentPage)&size=\(pageSize)") else {
             isLoading = false
             return
         }
@@ -219,9 +265,29 @@ struct EventListView: View {
 
             if let decoded = try? JSONDecoder().decode(PaginatedResponse<Event>.self, from: data) {
                 DispatchQueue.main.async {
-                    events.append(contentsOf: decoded.content)
+                    let existingIds = Set(events.map { $0.id })
+                    let newEvents = decoded.content.filter { !existingIds.contains($0.id) }
+                    events.append(contentsOf: newEvents)
                     currentPage += 1
                     hasMore = !decoded.last
+
+                    // ✅ Show RSVP popup if there's a reunion the user hasn’t RSVP’d yet
+                    let upcomingReunionsNeedingRsvp = decoded.content.filter {
+                        guard $0.type == "reunion" else { return false }
+                        
+                        let guest = ($0.reunionGuests ?? []).first(where: {
+                            $0.email.lowercased() == userSession.email.lowercased()
+                        })
+                        
+                        return guest != nil && guest?.attending == false
+                    }
+                    
+                    
+                    if let target = upcomingReunionsNeedingRsvp.first {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                            self.reunionToRsvp = target
+                        }
+                    }
                 }
             }
         }.resume()

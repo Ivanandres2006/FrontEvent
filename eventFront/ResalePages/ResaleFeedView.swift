@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ResaleFeedView: View {
+    @AppStorage("selectedLanguage") var lang: String = "en"
     @EnvironmentObject var userSession: UserSession
 
     @State private var posts: [ResalePostDTO] = []
@@ -25,7 +26,7 @@ struct ResaleFeedView: View {
                     .ignoresSafeArea()
 
                 if isLoading {
-                    ProgressView("Loading Resale Posts...")
+                    ProgressView(lang == "es" ? "Cargando Publicaciones de Reventa..." : "Loading Resale Posts...")
                         .foregroundColor(.white)
                 } else if posts.isEmpty {
                     VStack(spacing: 20) {
@@ -35,7 +36,7 @@ struct ResaleFeedView: View {
                             .frame(width: 60, height: 60)
                             .foregroundColor(.white.opacity(0.5))
 
-                        Text("No resale tickets found")
+                        Text(lang == "es" ? "No se encontraron entradas en reventa" : "No resale tickets found")
                             .foregroundColor(.white.opacity(0.8))
                             .font(.title3)
                     }
@@ -89,7 +90,7 @@ struct ResaleFeedView: View {
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title)
-                            .foregroundColor(.neonGreen)
+                            .foregroundColor(.gold)
                             .background(Circle().fill(Color.black.opacity(0.5)).frame(width: 44, height: 44))
                     }
                 }
@@ -112,11 +113,12 @@ struct ResaleFeedView: View {
                 }
                 .environmentObject(userSession)
             }
-            .sheet(isPresented: $showMyChats) {
+            .fullScreenCover(isPresented: $showMyChats) {
                 ChatListView()
             }
-            .sheet(item: $selectedChatSummary) { (summary: ChatRoomSummary) in
+            .fullScreenCover(item: $selectedChatSummary) { (summary: ChatRoomSummary) in
                 ChatView(chatSummary: summary, currentUserId: userSession.userId)
+                    .environmentObject(userSession)
             }
             .sheet(item: $selectedBuyNowPost) { post in
                 if let event = findEvent(for: post) {
@@ -127,7 +129,7 @@ struct ResaleFeedView: View {
                         onComplete: { fetchResalePosts() }
                     )
                 } else {
-                    Text("Event not found")
+                    Text(lang == "es" ? "Evento no encontrado" : "Event not found")
                 }
             }
         }
@@ -150,7 +152,7 @@ struct ResaleFeedView: View {
 
     func fetchResalePosts() {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/resale/available") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/resale/available") else { return }
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -170,7 +172,7 @@ struct ResaleFeedView: View {
 
     func fetchAllEvents(completion: @escaping () -> Void) {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/events") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/events") else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -194,7 +196,7 @@ struct ResaleFeedView: View {
     func fetchMyTickets() {
         guard let token = TokenManager.shared.getAccessToken(),
               let email = userSession.email.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "http://localhost:8080/api/tickets/my?email=\(email)") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/my?email=\(email)") else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -212,7 +214,7 @@ struct ResaleFeedView: View {
 
     func fetchUnreadCount() {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/chat/unread-count") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/chat/unread-count") else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -233,7 +235,7 @@ struct ResaleFeedView: View {
 
     func openChat(for post: ResalePostDTO) {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "http://localhost:8080/chat/start") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/chat/start") else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -257,7 +259,10 @@ struct ResaleFeedView: View {
                         resalePostId: post.id,
                         title: post.title,
                         sellerName: post.sellerName,
-                        unreadMessages: 0
+                        unreadMessages: 0,
+                        buyerId: userSession.userId,
+                        eventId: Int64(post.eventId),
+                        type: "DIRECT" 
                     )
                 }
             } else {

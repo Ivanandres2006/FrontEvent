@@ -18,5 +18,10 @@ extension Color {
     static let auroraPurple = Color(red: 80 / 255, green: 0 / 255, blue: 160 / 255)     // #5000A0
     static let auroraTeal = Color(red: 0 / 255, green: 255 / 255, blue: 204 / 255)      // #00FFCC
     static let coralAccent = Color(red: 255 / 255, green: 99 / 255, blue: 128 / 255)    // #FF6380
-    
+    static let electricBlue = Color(red: 59 / 255, green: 130 / 255, blue: 246 / 255) // #3B82F6
+    static let softPink = Color(red: 249 / 255, green: 168 / 255, blue: 212 / 255) // #F9A8D4
+    static let lavender = Color(red: 192 / 255, green: 132 / 255, blue: 252 / 255) // #C084FC
+    static let coral = Color(red: 251 / 255, green: 113 / 255, blue: 133 / 255) // #FB7185
+    static let aqua = Color(red: 6 / 255, green: 182 / 255, blue: 212 / 255) // #06B6D4
+    static let gold = Color(red: 238 / 255, green: 213 / 255, blue: 10 / 255) // #EED50A
 }

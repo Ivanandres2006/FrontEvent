@@ -7,7 +7,8 @@ struct LoginView: View {
     @AppStorage("isLoggedIn") private var isLoggedIn = false
     @AppStorage("hasPassword") private var hasPassword = false
     @AppStorage("hasUsername") private var hasUsername = false
-
+    @AppStorage("selectedLanguage") var lang: String = "en"
+    
     @State private var email = ""
     @State private var password = ""
     @State private var message = ""
@@ -26,7 +27,7 @@ struct LoginView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("Welcome Back")
+                    Text(lang == "es" ? "Bienvenido": "Welcome Back")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -35,8 +36,8 @@ struct LoginView: View {
                         .animation(.easeOut(duration: 0.5).delay(0.1), value: animate)
 
                     VStack(spacing: 16) {
-                        CustomInputField(icon: "person", placeholder: "Email or Username", text: $email, keyboard: .emailAddress)
-                        CustomInputField(icon: "lock", placeholder: "Password", text: $password, isSecure: true)
+                        CustomInputField(icon: "person", placeholder: lang == "es" ? "Correo Electronico o nombre de usuario": "Email or Username", text: $email, keyboard: .emailAddress)
+                        CustomInputField(icon: "lock", placeholder: lang == "es" ? "Clave" :"Password", text: $password, isSecure: true)
                     }
                     .padding()
                     .background(Color.white.opacity(0.05))
@@ -54,13 +55,13 @@ struct LoginView: View {
                     }
 
                     if isLoading {
-                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: Color.neonGreen))
+                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: Color.gold))
                     } else {
                         Button("Login", action: login)
                             .fontWeight(.bold)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(Color.neonGreen)
+                            .background(Color.gold)
                             .foregroundColor(.black)
                             .cornerRadius(12)
                             .opacity(animate ? 1.0 : 0)
@@ -69,14 +70,14 @@ struct LoginView: View {
 
                     HStack {
                         Spacer()
-                        NavigationLink("Forgot your password?", destination: ForgotPasswordView())
+                        NavigationLink(lang == "es" ? "Olvidaste tu contraseña?": "Forgot your password?", destination: ForgotPasswordView())
                             .foregroundColor(.gray)
                             .font(.footnote)
                     }
 
                     HStack {
                         Rectangle().frame(height: 1).foregroundColor(.gray.opacity(0.4))
-                        Text("OR").foregroundColor(.gray).font(.caption).padding(.horizontal)
+                        Text(lang == "es" ? "O" :"OR").foregroundColor(.gray).font(.caption).padding(.horizontal)
                         Rectangle().frame(height: 1).foregroundColor(.gray.opacity(0.4))
                     }
                     .padding(.horizontal)
@@ -97,7 +98,7 @@ struct LoginView: View {
 
                     Spacer()
 
-                    NavigationLink("Don't have an account? Register", destination: RegisterView())
+                    NavigationLink(lang == "es" ? "No tienes una cuenta? Registrate":"Don't have an account? Register", destination: RegisterView())
                         .foregroundColor(.gray)
                         .font(.footnote)
                         .padding(.bottom, 24)
@@ -112,7 +113,7 @@ struct LoginView: View {
     }
 
     func login() {
-        guard let url = URL(string: "http://localhost:8080/auth/login") else {
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/login") else {
             message = "⚠️ Invalid login URL"
             return
         }
@@ -203,7 +204,7 @@ struct LoginView: View {
     }
 
     func sendExternalLogin(idToken: String, provider: String) {
-        guard let url = URL(string: "http://localhost:8080/auth/\(provider)-login") else {
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/auth/\(provider)-login") else {
             message = "⚠️ Invalid login URL"
             return
         }

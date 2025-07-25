@@ -3,6 +3,7 @@ import SwiftUI
 struct SetUsernameView: View {
     @AppStorage("isLoggedIn") var isLoggedIn = false
     @AppStorage("hasUsername") var hasUsername = false
+    @AppStorage("selectedLanguage") var lang: String = "en"
 
     @State private var username = ""
     @State private var message = ""
@@ -18,7 +19,7 @@ struct SetUsernameView: View {
                 VStack(spacing: 30) {
                     Spacer()
 
-                    Text("👤 Choose Username")
+                    Text(lang == "es" ? "👤 Elige tu nombre de usuario" : "👤 Choose Username")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundStyle(.white)
@@ -29,7 +30,7 @@ struct SetUsernameView: View {
                     VStack(spacing: 16) {
                         CustomInputField(
                             icon: "person.crop.circle",
-                            placeholder: "Username",
+                            placeholder: lang == "es" ? "Nombre de usuario" : "Username",
                             text: $username,
                             keyboard: .default
                         )
@@ -51,14 +52,14 @@ struct SetUsernameView: View {
 
                     if isLoading {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: Color.neonGreen))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color.gold))
                     } else {
                         Button(action: setUsername) {
-                            Text("Save Username")
+                            Text(lang == "es" ? "Guardar nombre de usuario" : "Save Username")
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(Color.neonGreen)
+                                .background(Color.gold)
                                 .foregroundColor(.black)
                                 .cornerRadius(12)
                         }
@@ -85,7 +86,7 @@ struct SetUsernameView: View {
         isLoading = true
         message = ""
 
-        let url = URL(string: "http://localhost:8080/auth/set-username")!
+        let url = URL(string: "https://backendevent-etce.onrender.com/auth/set-username")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")

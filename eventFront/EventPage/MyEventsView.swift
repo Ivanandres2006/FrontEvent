@@ -125,7 +125,7 @@ struct MyEventsView: View {
 
             print("🔍 \(event.title): byId=\(byId), byEmail=\(byEmail), isReunionGuest=\(isReunionGuest), isFuture=\(isFuture)")
 
-            if (byId || byEmail || isReunionGuest), isFuture {
+            if (byId || byEmail), isFuture {
                 matching.append(event)
             }
         }
@@ -139,11 +139,8 @@ struct MyEventsView: View {
     private func pastCreatedEvents() -> [Event] {
         let now = Date()
         return allEvents.filter {
-            (($0.createdBy?.id == userSession.userId) ||
-             ($0.createdByEmail?.lowercased() == userSession.email.lowercased()) ||
-             ($0.type == "reunion" && $0.reunionGuests?.contains(where: {
-                 $0.email.lowercased() == userSession.email.lowercased()
-             }) == true))
+            ($0.createdBy?.id == userSession.userId) ||
+            ($0.createdByEmail?.lowercased() == userSession.email.lowercased())
             && ($0.dateAsDate ?? now) < now
         }
     }

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D001720C2E3973BA0075C795 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = D001720B2E3973BA0075C795 /* FirebaseCore */; };
+		D001720E2E3973BA0075C795 /* FirebaseInAppMessaging-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = D001720D2E3973BA0075C795 /* FirebaseInAppMessaging-Beta */; };
+		D00172102E3973BA0075C795 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = D001720F2E3973BA0075C795 /* FirebaseMessaging */; };
 		D01BF3C82E0A279E0099F474 /* Stripe in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3C72E0A279E0099F474 /* Stripe */; };
 		D01BF3CA2E0A279E0099F474 /* StripeApplePay in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3C92E0A279E0099F474 /* StripeApplePay */; };
 		D01BF3CC2E0A279E0099F474 /* StripeCardScan in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3CB2E0A279E0099F474 /* StripeCardScan */; };
@@ -79,7 +82,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D001720E2E3973BA0075C795 /* FirebaseInAppMessaging-Beta in Frameworks */,
 				D01BF3D02E0A279E0099F474 /* StripeFinancialConnections in Frameworks */,
+				D00172102E3973BA0075C795 /* FirebaseMessaging in Frameworks */,
 				D01BF3CC2E0A279E0099F474 /* StripeCardScan in Frameworks */,
 				D01BF3C82E0A279E0099F474 /* Stripe in Frameworks */,
 				D01BF3D22E0A279E0099F474 /* StripeIdentity in Frameworks */,
@@ -89,6 +94,7 @@
 				D01BF3D82E0A279E0099F474 /* StripePaymentsUI in Frameworks */,
 				D01BF3D62E0A279E0099F474 /* StripePayments in Frameworks */,
 				D01BF3CA2E0A279E0099F474 /* StripeApplePay in Frameworks */,
+				D001720C2E3973BA0075C795 /* FirebaseCore in Frameworks */,
 				D01BF3DD2E0A27B50099F474 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -169,6 +175,9 @@
 				D01BF3D72E0A279E0099F474 /* StripePaymentsUI */,
 				D01BF3DA2E0A27B50099F474 /* GoogleSignIn */,
 				D01BF3DC2E0A27B50099F474 /* GoogleSignInSwift */,
+				D001720B2E3973BA0075C795 /* FirebaseCore */,
+				D001720D2E3973BA0075C795 /* FirebaseInAppMessaging-Beta */,
+				D001720F2E3973BA0075C795 /* FirebaseMessaging */,
 			);
 			productName = eventFront;
 			productReference = D03C7B532DFA800700AA9615 /* eventFront.app */;
@@ -255,6 +264,7 @@
 			packageReferences = (
 				D01BF3C62E0A279E0099F474 /* XCRemoteSwiftPackageReference "stripe-ios" */,
 				D01BF3D92E0A27B50099F474 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D03C7B542DFA800700AA9615 /* Products */;
@@ -453,12 +463,15 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = eventFront/eventFront.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2UBY927644;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = 3RF8DYAD9L;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = eventFront/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WKND;
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan QR codes for event check-in, and send photo via chat\nWe use the camera to scan QR codes for event check-in.\nWe use the camera to scan QR codes for event check-in.\n";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo access so you can upload your profile picture, and on chat";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -473,7 +486,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.imadriz.newAppIma.eventFront;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -493,12 +506,15 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = eventFront/eventFront.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 2UBY927644;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = 3RF8DYAD9L;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = eventFront/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WKND;
+				INFOPLIST_KEY_NSCameraUsageDescription = "We use the camera to scan QR codes for event check-in, and send photo via chat\nWe use the camera to scan QR codes for event check-in.\nWe use the camera to scan QR codes for event check-in.\n";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "We need photo access so you can upload your profile picture, and on chat";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -513,7 +529,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.imadriz.newAppIma.eventFront;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -658,6 +674,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.0.0;
+			};
+		};
 		D01BF3C62E0A279E0099F474 /* XCRemoteSwiftPackageReference "stripe-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/stripe/stripe-ios";
@@ -677,6 +701,21 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D001720B2E3973BA0075C795 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		D001720D2E3973BA0075C795 /* FirebaseInAppMessaging-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseInAppMessaging-Beta";
+		};
+		D001720F2E3973BA0075C795 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
 		D01BF3C72E0A279E0099F474 /* Stripe */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = D01BF3C62E0A279E0099F474 /* XCRemoteSwiftPackageReference "stripe-ios" */;

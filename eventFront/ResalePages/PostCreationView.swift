@@ -86,10 +86,11 @@ struct PostCreationView: View {
 
     var dropdownView: some View {
         let options = availableTickets.map {
-            let label = "\($0.eventTitle ?? (lang == "es" ? "Evento Sin Título" : "Untitled Event")) - \($0.tierName ?? (lang == "es" ? "Nivel Sin Nombre" : "Unnamed Tier"))"
-            print("📦 Option: \(label)")
-            return label
+            let e = $0.eventTitle ?? (lang == "es" ? "Evento Sin Título" : "Untitled Event")
+            let t = $0.tierName ?? (lang == "es" ? "Nivel Sin Nombre" : "Unnamed Tier")
+            return "\(e) - \(t) • #\($0.id)"
         }
+
 
         return VStack(alignment: .leading, spacing: 10) {
             Text(lang == "es" ? "Selecciona Entrada" : "Select Ticket")
@@ -101,21 +102,19 @@ struct PostCreationView: View {
                 options: options
             )
             .id(UUID())
-                .onChange(of: selectedTicketLabel) { label in
-                    print("🟢 Selected Label: \(label)")
-                    if let ticket = availableTickets.first(where: {
-                        let match = "\($0.eventTitle ?? (lang == "es" ? "Evento Sin Título" : "Untitled Event")) - \($0.tierName ?? (lang == "es" ? "Nivel Sin Nombre" : "Unnamed Tier"))"
-                        return match == label
-                    }) {
-                        print("✅ Ticket matched: ID \(ticket.id)")
-                        selectedTicketId = ticket.id
+            .onChange(of: selectedTicketLabel) { label in
+                // label ends with "• #<id>"
+                if let idString = label.split(separator: "#").last,
+                   let id = Int(idString) {
+                    selectedTicketId = id
+                    if let ticket = availableTickets.first(where: { $0.id == id }) {
                         title = "\(ticket.eventTitle ?? "") - \(ticket.tierName ?? "")"
                         if price.isEmpty { price = "10.00" }
-                    } else {
-                        print("❌ No ticket matched")
-                        errorMessage = lang == "es" ? "Entrada no encontrada." : "Ticket not matched."
                     }
+                } else {
+                    errorMessage = lang == "es" ? "Entrada no encontrada." : "Ticket not matched."
                 }
+            }
         }
     }
 
@@ -205,6 +204,10 @@ struct PostCreationView: View {
             DispatchQueue.main.async {
                 isLoading = false
                 if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                    // ✅ hide immediately in UI
+                    if let idx = viewModel.tickets.firstIndex(where: { $0.id == ticketId }) {
+                        viewModel.tickets[idx].resold = true
+                    }
                     onPostCreated()
                     dismiss()
                 } else {
@@ -212,6 +215,7 @@ struct PostCreationView: View {
                         errorMessage = lang == "es" ? "No se pudo crear la publicación" : "Failed to create post"
                     }
                 }
+
             }
         }.resume()
     }

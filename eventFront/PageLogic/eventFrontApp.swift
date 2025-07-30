@@ -3,6 +3,7 @@ import Stripe
 
 @main
 struct eventFrontApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     init() {
         StripeAPI.defaultPublishableKey = "pk_test_51RcVeBBU1Fa59mBKHvngFVDwq8gBiZ863TKO6okEHBj28VjLiYAUQ5OhDs0k1WEyfqXRmtziurmLYBqlQfyOOl6C007EKiWppc"
 

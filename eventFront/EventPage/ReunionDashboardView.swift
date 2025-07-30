@@ -14,6 +14,9 @@ struct ReunionDashboardView: View {
     @State private var message = ""
     @State private var paymentSheet: PaymentSheet?
     @State private var guests: [ReunionGuest] = []
+    
+    @State private var showAddGuestSheet = false
+
 
     var body: some View {
         VStack(spacing: 24) {
@@ -56,9 +59,23 @@ struct ReunionDashboardView: View {
 
             // Guest List Section
             VStack(alignment: .leading, spacing: 14) {
-                Text(lang == "es" ? "👥 Contribuciones de los Invitados" : "👥 Guest Contributions")
-                    .font(.headline)
-                    .foregroundColor(.white)
+                HStack {
+                    Text(lang == "es" ? "👥 Contribuciones de los Invitados" : "👥 Guest Contributions")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+
+                    if isOwner {
+                        Button {
+                            showAddGuestSheet = true
+                        } label: {
+                            Label("Edit", systemImage: "pencil.circle")
+                                .foregroundColor(.gold)
+                                .font(.body)
+                        }
+                    }
+                }
 
                 if guests.isEmpty {
                     VStack(spacing: 8) {
@@ -123,6 +140,7 @@ struct ReunionDashboardView: View {
                                     }
                                 }
                                 .padding()
+                                .listRowBackground(Color.clear)
                                 .background(Color.white.opacity(0.05))
                                 .cornerRadius(12)
                             }
@@ -136,7 +154,18 @@ struct ReunionDashboardView: View {
         .padding()
         .background(LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
         .onAppear {
-            self.guests = attendees
+            fetchUpdatedGuests()
+        }
+        .sheet(isPresented: $showAddGuestSheet, onDismiss: {
+            fetchUpdatedGuests() // ✅ Refresh backend state on close
+        }) {
+            AddGuestSheetView(
+                onAddGuest: { updatedGuests in
+                    guests = updatedGuests
+                },
+                existingGuests: guests,
+                eventId: eventId
+            )
         }
     }
 
@@ -183,10 +212,8 @@ struct ReunionDashboardView: View {
 
                     switch result {
                     case .completed:
-                        if let guestIndex = guests.firstIndex(where: { $0.email == userSession.email }) {
-                            guests[guestIndex].paid = true
-                        }
                         updatePaidStatus(email: userSession.email, paid: true)
+                        fetchUpdatedGuests() // ✅ fetch fresh data from backend
                     case .canceled:
                         message = "❌ Payment canceled"
                     case .failed(let error):
@@ -268,32 +295,46 @@ struct ReunionDashboardView: View {
             }
         }.resume()
     }
-
-
     
     private func extractPaymentIntentId(from clientSecret: String) -> String? {
         return clientSecret.components(separatedBy: "_secret").first
     }
 
-    func updatePaidStatus(email: String, paid: Bool) {
+    
+    func fetchUpdatedGuests() {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)/update-guest") else { return }
+              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)") else { return }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = GuestUpdateRequest(email: email, paid: paid)
-        request.httpBody = try? JSONEncoder().encode(body)
 
-        URLSession.shared.dataTask(with: request) { _, _, error in
-            if let error = error {
-                print("❌ Update guest failed: \(error)")
-            } else {
-                print("✅ Updated guest paid status for \(email)")
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            guard let data = data else { return }
+            if let updatedEvent = try? JSONDecoder().decode(Event.self, from: data) {
+                DispatchQueue.main.async {
+                    self.guests = updatedEvent.reunionGuests ?? []
+                }
             }
         }.resume()
     }
+
+
+    
+    func updatePaidStatus(email: String, paid: Bool) {
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/payments/confirm-reunion-paid?eventId=\(eventId)&email=\(email)&paid=\(paid)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                print("❌ Confirm reunion paid failed: \(error)")
+            } else if let httpResponse = response as? HTTPURLResponse {
+                print("✅ Confirm reunion paid status: \(httpResponse.statusCode)")
+            }
+        }.resume()
+    }
+
 }
 
 struct GuestUpdateRequest: Encodable {
@@ -304,3 +345,245 @@ struct GuestUpdateRequest: Encodable {
 struct PaymentSheetResponse: Decodable {
     let clientSecret: String
 }
+
+struct AddGuestSheetView: View {
+    @Environment(\.dismiss) var dismiss
+    @State private var usernameSearch = ""
+    @State private var suggestions: [String] = []
+    @State private var isSearching = false
+    @State private var justAddedUsername: String?
+
+    var onAddGuest: ([ReunionGuest]) -> Void
+    var existingGuests: [ReunionGuest]
+    var eventId: Int
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("🔍 Edit the Reunion Guests")
+                    .font(.title.bold())
+                    .foregroundColor(.white)
+
+                TextField("Start typing a username...", text: $usernameSearch)
+                    .onChange(of: usernameSearch) { _ in fetchSuggestions() }
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(12)
+                    .foregroundColor(.white)
+
+                if isSearching {
+                    HStack {
+                        Spacer()
+                        ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        Spacer()
+                    }
+                } else if !usernameSearch.isEmpty && suggestions.isEmpty {
+                    Text("❌ No matching users found")
+                        .foregroundColor(.gray)
+                        .padding(.top, 20)
+                }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+
+                        // Suggestions
+                        if !suggestions.isEmpty {
+                            Text("Suggestions")
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.headline)
+
+                            ForEach(suggestions, id: \.self) { username in
+                                Button {
+                                    addGuest(username: username)
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "person.crop.circle.badge.plus")
+                                        Text(username).fontWeight(.medium)
+                                        Spacer()
+                                        Image(systemName: "chevron.right")
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .background(Color.white.opacity(0.08))
+                                    .cornerRadius(10)
+                                }
+                            }
+
+                            Divider().background(Color.white.opacity(0.2)).padding(.vertical)
+                        }
+
+                        // Current Guests (with swipe to delete)
+                        Text("Current Guests")
+                            .foregroundColor(.white.opacity(0.6))
+                            .font(.headline)
+
+                        if existingGuests.isEmpty {
+                            HStack {
+                                Spacer()
+                                Text("🙁 No guests added yet")
+                                    .foregroundColor(.gray)
+                                    .padding(.vertical, 32)
+                                Spacer()
+                            }
+                        } else {
+                            List {
+                                ForEach(existingGuests, id: \.username) { guest in
+                                    HStack {
+                                        Image(systemName: guest.attending ? "checkmark.circle.fill" : "person.fill")
+                                            .foregroundColor(guest.attending ? .green : .white)
+                                        Text(guest.name.isEmpty ? guest.username : guest.name)
+                                            .foregroundColor(.white)
+                                        Spacer()
+                                    }
+                                    .padding()
+                                    .listRowBackground(Color.clear)
+                                    .background(Color.white.opacity(0.05))
+                                    .cornerRadius(10)
+                                }
+                                .onDelete(perform: deleteGuest)
+                            }
+                            .listStyle(PlainListStyle())
+                            .frame(height: 200)
+                            .background(Color.clear)
+                        }
+                    }
+                }
+
+                if let added = justAddedUsername {
+                    Text("✅ Added \(added)")
+                        .foregroundColor(.green)
+                        .font(.subheadline)
+                        .transition(.opacity)
+                        .padding(.top)
+                }
+
+                Spacer()
+            }
+            .padding()
+            .background(LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+            .navigationBarItems(trailing: Button("Close") {
+                dismiss()
+            }.foregroundColor(.gold))
+        }
+    }
+
+    func fetchSuggestions() {
+        guard !usernameSearch.isEmpty else {
+            suggestions = []
+            return
+        }
+
+        isSearching = true
+        let query = usernameSearch.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let urlStr = "https://backendevent-etce.onrender.com/user/search-usernames?q=\(query)"
+
+        guard let url = URL(string: urlStr),
+              let token = TokenManager.shared.getAccessToken() else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            DispatchQueue.main.async {
+                isSearching = false
+                if let data = data,
+                   let usernames = try? JSONDecoder().decode([String].self, from: data) {
+                    suggestions = usernames.filter { u in
+                        !existingGuests.contains(where: { $0.username.lowercased() == u.lowercased() })
+                    }
+                } else {
+                    suggestions = []
+                }
+            }
+        }.resume()
+    }
+
+    func deleteGuest(at offsets: IndexSet) {
+        // 1. Update local guest list
+        let updatedGuests = existingGuests.enumerated()
+            .filter { !offsets.contains($0.offset) }
+            .map { $0.element }
+
+        // 2. Convert to DTOs
+        let guestDTOs: [[String: Any]] = updatedGuests.map {
+            [
+                "username": $0.username,
+                "paid": $0.paid
+            ]
+        }
+
+        // 3. Send to backend
+        guard let token = TokenManager.shared.getAccessToken(),
+              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["guests": guestDTOs])
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                print("❌ Failed to delete guest: \(error)")
+            } else if let httpResponse = response as? HTTPURLResponse {
+                print("✅ Guest deleted. Status: \(httpResponse.statusCode)")
+            }
+        }.resume()
+
+        // 4. Update UI immediately
+        DispatchQueue.main.async {
+            onAddGuest(updatedGuests)
+        }
+    }
+
+    
+    func addGuest(username: String) {
+        let newGuest = ReunionGuest(
+            username: username,
+            name: username,
+            email: "",
+            paid: false,
+            attending: false
+        )
+
+        let updatedGuests = existingGuests + [newGuest]
+        onAddGuest(updatedGuests)
+        updateGuestListOnServer(updatedGuests)
+        justAddedUsername = username
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            justAddedUsername = nil
+            dismiss()
+        }
+    }
+
+    func updateGuestListOnServer(_ updatedGuests: [ReunionGuest]) {
+        guard let token = TokenManager.shared.getAccessToken(),
+              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)") else { return }
+
+        let guestDTOs: [[String: Any]] = updatedGuests.map {
+            [
+                "username": $0.username,
+                "paid": $0.paid
+            ]
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["guests": guestDTOs])
+
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let error = error {
+                print("❌ Failed to update guests: \(error)")
+            } else if let httpResponse = response as? HTTPURLResponse {
+                print("✅ Updated guest list. Status: \(httpResponse.statusCode)")
+            }
+        }.resume()
+    }
+
+}
+
+
+

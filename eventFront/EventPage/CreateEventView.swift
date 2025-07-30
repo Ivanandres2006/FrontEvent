@@ -295,7 +295,7 @@ struct CreateEventView: View {
                     type: "event"
                 )
                 eventTypeButton(
-                    title: lang == "es" ? "Reunión" : "Reunion",
+                    title: lang == "es" ? "Meeting" : "Reunion",
                     icon: "person.3.fill",
                     description: lang == "es" ? "Gratis. Comparte presupuesto y organiza juntos." : "Free. Split budget and plan together.",
                     type: "reunion"

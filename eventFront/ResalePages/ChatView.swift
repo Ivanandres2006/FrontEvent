@@ -602,11 +602,14 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
 
     
     var isEventInPast: Bool {
-        if chatSummary.type == "DIRECT" || chatSummary.type == "PROMOTER_GROUP" {
+        // 🛡️ Never consider direct or promoter group chats as past
+        if chatSummary.type.uppercased() == "DIRECT" || chatSummary.type.uppercased() == "PROMOTER_GROUP" {
             return false
         }
 
+        // 🛡️ If event is missing or malformed, default to not past
         guard let eventDate = loadedEvent?.dateAsDate else { return false }
+
         return eventDate < Date()
     }
 
@@ -692,6 +695,7 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                   let decoded = try? JSONDecoder().decode(ChatMessage.self, from: data) else { return }
             DispatchQueue.main.async {
                 messages.append(decoded)
+                newMessage = ""
             }
         }.resume()
     }

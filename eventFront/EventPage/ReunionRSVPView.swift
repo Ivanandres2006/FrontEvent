@@ -14,8 +14,7 @@ struct ReunionRSVPView: View {
     var body: some View {
         ZStack {
             // Fullscreen blurred background
-            Color.clear
-                .background(.ultraThinMaterial)
+            Color.black.opacity(0.4)
                 .ignoresSafeArea()
 
             // RSVP card

@@ -261,14 +261,10 @@ struct EventPromoterDashboardView: View {
                                                 if isEventOwner() && isManual(ticket: ticket) {
                                                     Menu {
                                                         Button(lang == "es" ? "Pendiente" : "Pending") {
-                                                            if ticket.paid {
-                                                                togglePaidStatus(for: ticket)
-                                                            }
+                                                            togglePaidStatus(for: ticket)
                                                         }
                                                         Button(lang == "es" ? "Pagado" : "Paid") {
-                                                            if !ticket.paid {
-                                                                togglePaidStatus(for: ticket)
-                                                            }
+                                                            togglePaidStatus(for: ticket)
                                                         }
                                                     } label: {
                                                         HStack(spacing: 6) {

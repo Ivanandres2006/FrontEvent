@@ -8,7 +8,7 @@ struct TicketDTO: Identifiable, Codable {
     let tierName: String?
     let eventTitle: String?
     let eventId: Int
-    let resold: Bool
+    var resold: Bool
 
     let buyerFirstName: String
     let buyerLastName: String

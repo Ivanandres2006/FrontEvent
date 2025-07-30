@@ -4,7 +4,7 @@ import StripePaymentSheet
 
 struct RegisterTicketView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
-    let event: Event
+    @State var event: Event
     let userEmail: String
     var onComplete: ([TicketDTO]) -> Void
 
@@ -186,33 +186,35 @@ struct RegisterTicketView: View {
                         }
                         
                         let hasNonCardPayments = isZelleAvailable ||
-                            (event.country.lowercased() == "venezuela" &&
-                             ((event.allowPagoMovil ?? false) || (event.allowCash ?? false)))
+                        (event.country.lowercased() == "venezuela" &&
+                         ((event.allowPagoMovil ?? false) || (event.allowCash ?? false)))
                         
                         // 🔹 Pay Now Button
                         Button {
                             if hasNonCardPayments {
+                                withAnimation {
                                     showPaymentPopup = true
-                                    selectedPaymentMethod = "card"
-                                } else {
-                                    startCheckout()
                                 }
+                                selectedPaymentMethod = "card"
+                            } else {
+                                startCheckout()
+                            }
                         } label: {
                             HStack {
                                 Spacer()
                                 Text(isLoading
                                      ? (lang == "es" ? "Procesando..." : "Processing...")
                                      : (lang == "es" ? "Pagar Ahora" : "Pay Now"))
-                                    .fontWeight(.bold)
-                                    .padding(.vertical, 12)
-                                    .foregroundColor(.black)
+                                .fontWeight(.bold)
+                                .padding(.vertical, 12)
+                                .foregroundColor(.black)
                                 Spacer()
                             }
                             .background(isLoading ? Color.gray : Color.gold)
                             .cornerRadius(16)
                         }
                         .disabled(isLoading || selectedTier == nil)
-
+                        
                     }
                     
                     // 🔺 Error Message
@@ -228,154 +230,54 @@ struct RegisterTicketView: View {
                 }
                 .padding()
                 
-                if showPaymentPopup {
-                    Color.black.opacity(0.5)
+                
+                
+            }
+            
+            if showPaymentPopup {
+                ZStack {
+                    // Dimmed background
+                    Color.black.opacity(0.6)
                         .ignoresSafeArea()
                         .onTapGesture { showPaymentPopup = false }
-
+                    
+                    // Centered Modal Card
                     VStack(spacing: 18) {
                         Text("💰 " + (lang == "es" ? "Total a Pagar" : "Total to Pay"))
                             .font(.title3.bold())
                             .foregroundColor(.white)
-
+                        
                         if let tier = selectedTier {
                             Text("$\(Double(quantity) * tier.price, specifier: "%.2f")")
                                 .font(.largeTitle.bold())
                                 .foregroundColor(.gold)
                         }
-
-                        // 👉 Selectable Buttons
+                        
+                        // 👉 Payment Options (conditionally shown)
                         VStack(spacing: 12) {
-                            // Zelle Button
-                            Button {
-                                selectedPaymentMethod = "zelle"
-                            } label: {
-                                HStack {
-                                    Image(systemName: "banknote.fill")
-                                    Text(lang == "es" ? "Contribuir con Zelle" : "Pay with Zelle")
-                                }
-                                .foregroundColor(selectedPaymentMethod == "zelle" ? .black : .white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(selectedPaymentMethod == "zelle" ? Color.gold : Color.white.opacity(0.1))
-                                .cornerRadius(14)
-                            }
-
-                            if selectedPaymentMethod == "zelle" {
-                                VStack(spacing: 4) {
-                                    if let email = event.zelleEmail, !email.isEmpty {
-                                        HStack {
-                                            Image(systemName: "envelope")
-                                            Text(email)
-                                        }
-                                        .foregroundColor(.white)
-                                    }
-                                    if let phone = event.zellePhone, !phone.isEmpty {
-                                        HStack {
-                                            Image(systemName: "phone")
-                                            Text(phone)
-                                        }
-                                        .foregroundColor(.white)
-                                    }
-
-                                    Text(lang == "es"
-                                         ? "Después de pagar por Zelle, toca Pagar abajo para notificar al organizador."
-                                         : "After sending your Zelle payment, tap Pay below to notify the organizer.")
-                                        .font(.footnote)
-                                        .foregroundColor(.white.opacity(0.6))
-                                        .multilineTextAlignment(.center)
-                                        .padding(.top, 4)
-                                }
+                            if isZelleAvailable {
+                                paymentOptionButton("zelle", icon: "banknote.fill", titleES: "Contribuir con Zelle", titleEN: "Pay with Zelle")
                             }
                             
                             if event.country.lowercased() == "venezuela" && (event.allowPagoMovil ?? false) {
-                                Button {
-                                    selectedPaymentMethod = "pagoMovil"
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "iphone.gen3")
-                                        Text(lang == "es" ? "Pago Móvil" : "Pago Móvil")
-                                    }
-                                    .foregroundColor(selectedPaymentMethod == "pagoMovil" ? .black : .white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(selectedPaymentMethod == "pagoMovil" ? Color.gold : Color.white.opacity(0.1))
-                                    .cornerRadius(14)
-                                }
+                                paymentOptionButton("pagoMovil", icon: "iphone.gen3", titleES: "Pago Móvil", titleEN: "Pago Móvil")
                             }
-
+                            
                             if event.country.lowercased() == "venezuela" && (event.allowCash ?? false) {
-                                Button {
-                                    selectedPaymentMethod = "cash"
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "banknote")
-                                        Text(lang == "es" ? "Pagar en Efectivo" : "Pay with Cash")
-                                    }
-                                    .foregroundColor(selectedPaymentMethod == "cash" ? .black : .white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(selectedPaymentMethod == "cash" ? Color.gold : Color.white.opacity(0.1))
-                                    .cornerRadius(14)
-                                }
+                                paymentOptionButton("cash", icon: "banknote", titleES: "Pagar en Efectivo", titleEN: "Pay with Cash")
                             }
                             
-                            if selectedPaymentMethod == "pagoMovil" {
-                                VStack(spacing: 6) {
-                                    if let phone = event.pagoMovilPhone {
-                                        Text("📱 \(phone)").foregroundColor(.white)
-                                    }
-                                    if let ci = event.pagoMovilCi {
-                                        Text("🪪 C.I.: \(ci)").foregroundColor(.white)
-                                    }
-                                    if let bank = event.pagoMovilBank {
-                                        Text("🏦 \(bank)").foregroundColor(.white)
-                                    }
-                                    Text(lang == "es"
-                                         ? "Después de pagar por Pago Móvil, toca Pagar abajo para notificar al organizador."
-                                         : "After sending your Pago Móvil payment, tap Pay below to notify the organizer.")
-                                    .font(.footnote)
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .multilineTextAlignment(.center)
-                                }
-                            }
-
-                            if selectedPaymentMethod == "cash", let note = event.cashNote {
-                                VStack(spacing: 6) {
-                                    Text("📝 " + note)
-                                        .font(.footnote)
-                                        .foregroundColor(.white)
-                                        .multilineTextAlignment(.center)
-                                    Text(lang == "es"
-                                         ? "Toca Pagar abajo para notificar al organizador."
-                                         : "Tap Pay below to notify the organizer.")
-                                    .font(.footnote)
-                                    .foregroundColor(.white.opacity(0.6))
-                                }
-                            }
-
-                            
-
-                            // Card Button
-                            Button {
-                                selectedPaymentMethod = "card"
-                            } label: {
-                                HStack {
-                                    Image(systemName: "creditcard.fill")
-                                    Text(lang == "es" ? "Pagar con Tarjeta" : "Pay with Card")
-                                }
-                                .foregroundColor(selectedPaymentMethod == "card" ? .black : .white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(selectedPaymentMethod == "card" ? Color.gold : Color.white.opacity(0.1))
-                                .cornerRadius(14)
-                            }
+                            // Always show card
+                            paymentOptionButton("card", icon: "creditcard.fill", titleES: "Pagar con Tarjeta", titleEN: "Pay with Card")
                         }
-
-                        // Final Action Button
+                        
+                        // Info details based on selected method
+                        paymentDetailsView()
+                        
+                        // Final Pay Button
                         Button {
                             showPaymentPopup = false
-                            startCheckout() // always call this for all payment methods
+                            startCheckout()
                         } label: {
                             Text(lang == "es" ? "Pagar" : "Pay")
                                 .fontWeight(.bold)
@@ -385,27 +287,111 @@ struct RegisterTicketView: View {
                                 .foregroundColor(.black)
                                 .cornerRadius(16)
                         }
-
-                        // Cancel
+                        
+                        // Cancel Button
                         Button(action: { showPaymentPopup = false }) {
                             Text(lang == "es" ? "Cancelar" : "Cancel")
                                 .foregroundColor(.white.opacity(0.6))
                         }
-
+                        
                     }
                     .padding()
                     .background(.ultraThinMaterial)
                     .cornerRadius(22)
-                    .padding()
+                    .padding(.horizontal)
                     .frame(maxWidth: 350)
                 }
+                .transition(.scale)
+                .zIndex(10)
             }
+        }
+        .animation(.easeInOut, value: showPaymentPopup)
+    }
+
+    @ViewBuilder
+    private func paymentOptionButton(_ method: String, icon: String, titleES: String, titleEN: String) -> some View {
+        Button {
+            selectedPaymentMethod = method
+        } label: {
+            HStack {
+                Image(systemName: icon)
+                Text(lang == "es" ? titleES : titleEN)
+            }
+            .foregroundColor(selectedPaymentMethod == method ? .black : .white)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(selectedPaymentMethod == method ? Color.gold : Color.white.opacity(0.1))
+            .cornerRadius(14)
         }
     }
 
-    
+    @ViewBuilder
+    private func paymentDetailsView() -> some View {
+        switch selectedPaymentMethod {
+        case "zelle":
+            VStack(spacing: 4) {
+                if let email = event.zelleEmail, !email.isEmpty {
+                    HStack {
+                        Image(systemName: "envelope")
+                        Text(email)
+                    }.foregroundColor(.white)
+                }
+                if let phone = event.zellePhone, !phone.isEmpty {
+                    HStack {
+                        Image(systemName: "phone")
+                        Text(phone)
+                    }.foregroundColor(.white)
+                }
+                Text(lang == "es"
+                     ? "Después de pagar por Zelle, toca Pagar abajo para notificar al organizador."
+                     : "After sending your Zelle payment, tap Pay below to notify the organizer.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+            }
+
+        case "pagoMovil":
+            VStack(spacing: 6) {
+                if let phone = event.pagoMovilPhone {
+                    Text("📱 \(phone)").foregroundColor(.white)
+                }
+                if let ci = event.pagoMovilCi {
+                    Text("🪪 C.I.: \(ci)").foregroundColor(.white)
+                }
+                if let bank = event.pagoMovilBank {
+                    Text("🏦 \(bank)").foregroundColor(.white)
+                }
+                Text(lang == "es"
+                     ? "Después de pagar por Pago Móvil, toca Pagar abajo para notificar al organizador."
+                     : "After sending your Pago Móvil payment, tap Pay below to notify the organizer.")
+                .font(.footnote)
+                .foregroundColor(.white.opacity(0.6))
+                .multilineTextAlignment(.center)
+            }
+
+        case "cash":
+            if let note = event.cashNote {
+                VStack(spacing: 6) {
+                    Text("📝 " + note)
+                        .font(.footnote)
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    Text(lang == "es"
+                         ? "Toca Pagar abajo para notificar al organizador."
+                         : "Tap Pay below to notify the organizer.")
+                    .font(.footnote)
+                    .foregroundColor(.white.opacity(0.6))
+                }
+            }
+
+        default:
+            EmptyView()
+        }
+    }
 
     private func startCheckout() {
+        paymentSheet = nil
+        isPaymentSheetPresented = false
         guard let tier = selectedTier else { return }
         guard let token = TokenManager.shared.getAccessToken() else {
             message = "❌ Not authenticated. Please log in again."
@@ -486,6 +472,23 @@ struct RegisterTicketView: View {
             }
         }.resume()
     }
+    
+    private func fetchUpdatedEventData() {
+        guard let token = TokenManager.shared.getAccessToken() else { return }
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            if let data = data,
+               let updatedEvent = try? JSONDecoder().decode(Event.self, from: data) {
+                DispatchQueue.main.async {
+                    self.event = updatedEvent
+                }
+            }
+        }.resume()
+    }
+
 
 
     private func presentPaymentSheet(paymentIntentId: String) {
@@ -524,10 +527,14 @@ struct RegisterTicketView: View {
                     switch result {
                     case .completed:
                         confirmBackend(paymentIntentId: paymentIntentId)
+                        fetchUpdatedEventData() // ✅ add this
                     case .canceled:
                         message = "❌ Payment canceled."
+                        fetchUpdatedEventData()
                     case .failed(let error):
                         message = "❌ Payment failed: \(error.localizedDescription)"
+                        fetchUpdatedEventData()
+
                     }
                 }
             } else {
@@ -566,6 +573,7 @@ struct RegisterTicketView: View {
 
         URLSession.shared.dataTask(with: request) { _, _, _ in
             fetchTickets()
+            fetchUpdatedEventData() // ✅ optional but safer
         }.resume()
     }
 
@@ -585,6 +593,8 @@ struct RegisterTicketView: View {
                 if let data = data,
                    let tickets = try? JSONDecoder().decode([TicketDTO].self, from: data) {
                     self.onComplete(tickets)
+                    self.selectedTierId = nil
+                    self.quantity = 1
                     self.dismiss()
                 } else {
                     self.message = "Failed to load tickets."

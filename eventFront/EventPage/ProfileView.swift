@@ -64,6 +64,24 @@ struct ProfileView: View {
                                         Spacer()
                                     }
                                     .padding()
+                        
+                        if userSession.role == "ADMIN" {
+                            VStack(spacing: 10) {
+                                Button(action: {
+                                    sendTestNotification()
+                                }) {
+                                    Text("Send Push to All Devices")
+                                        .fontWeight(.bold)
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.orange)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(12)
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+
 
                         PhotosPicker(selection: $selectedItem, matching: .images) {
                             Text("Upload Event Photo")
@@ -148,6 +166,25 @@ struct ProfileView: View {
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
         }
+    }
+    
+    func sendTestNotification() {
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/notifications/send-test") else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("❌ Error sending push: \(error.localizedDescription)")
+                return
+            }
+
+            if let httpResponse = response as? HTTPURLResponse {
+                print("✅ Notification sent, status: \(httpResponse.statusCode)")
+            }
+        }.resume()
     }
     
     struct CustomDropdown: View {

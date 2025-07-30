@@ -122,7 +122,7 @@ struct Event: Identifiable, Codable {
         self.country = ""
         self.latitude = nil
         self.longitude = nil
-        self.dateTime = "2025-01-01T00:00:00"
+        self.dateTime = "2099-01-01T00:00:00"
         self.imageUrl = nil
         self.createdByEmail = nil
         self.attendees = []

@@ -9,8 +9,9 @@ struct ResalePostDTO: Identifiable, Codable {
     let sellerName: String
     let eventTitle: String
     let eventImageUrl: String?
-    let unreadMessages: Int?
-    let eventId: Int
+    let unreadMessages: Int
+    let sellerId: Int
+    let eventId: Int?
     let sold: Bool  // ✅ NEW FIELD
 
 }

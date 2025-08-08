@@ -6,13 +6,14 @@ struct MainTabView: View {
     @State private var selectedTab = 0
     @AppStorage("selectedLanguage") var lang: String = "en"
     @State private var userActiveEventIds: Set<Int> = []
+    @Binding var deepLinkEventId: String?
 
 
     var body: some View {
         TabView(selection: $selectedTab) {
             // 🔘 Event List
             NavigationStack {
-                EventListView(events: $allEvents, selectedTab: $selectedTab)
+                EventListView(events: $allEvents, selectedTab: $selectedTab, deepLinkEventId: $deepLinkEventId) // <--
             }
             .tabItem {
                 Label(lang == "es" ? "Eventos" : "Events", systemImage: "calendar")

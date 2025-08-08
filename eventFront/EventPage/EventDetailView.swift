@@ -2,6 +2,8 @@ import SwiftUI
 import MapKit
 import UIKit
 import Charts
+import PassKit
+
 
 struct EventDetailView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
@@ -9,7 +11,7 @@ struct EventDetailView: View {
     @Binding var allEvents: [Event]
     @EnvironmentObject var userSession: UserSession
     @Environment(\.dismiss) var dismiss
-
+    
     @State private var purchasedTickets: [TicketDTO] = []
     @State private var isFetchingTickets = false
     @State private var showRegisterSheet = false
@@ -23,7 +25,7 @@ struct EventDetailView: View {
     
     @State private var shareURL: URL? = nil
     @State private var isFetchingShareLink = false
-
+    
     @State private var eventPromoters: [PromoterEvent] = []
     @State private var showAddPromoterSheet = false
     @State private var showPromoterDashboard = false
@@ -35,17 +37,17 @@ struct EventDetailView: View {
     
     @State private var directChatSummary: ChatRoomSummary?
     @State private var showChatView = false
-
+    
     @State private var selectedTab: String = "overview" // "overview" or "dashboard"
-
-
+    
+    
     var coordinate: CLLocationCoordinate2D? {
         if let lat = event.latitude, let lng = event.longitude {
             return CLLocationCoordinate2D(latitude: lat, longitude: lng)
         }
         return nil
     }
-
+    
     var body: some View {
         VStack(spacing: 0) {
             Capsule()
@@ -56,7 +58,7 @@ struct EventDetailView: View {
                 .opacity(showHandle ? 1 : 0)
                 .offset(y: showHandle ? 0 : -10)
                 .animation(.easeOut(duration: 0.3), value: showHandle)
-
+            
             ScrollView {
                 VStack(spacing: 16) {
                     // ✅ Tab Switcher — only for reunions
@@ -73,7 +75,7 @@ struct EventDetailView: View {
                                     .foregroundColor(selectedTab == "overview" ? .black : .white.opacity(0.6))
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                             }
-
+                            
                             Button(action: {
                                 selectedTab = "dashboard"
                             }) {
@@ -91,14 +93,14 @@ struct EventDetailView: View {
                         .cornerRadius(12)
                         .padding(.horizontal)
                     }
-
+                    
                     // ✅ Overview tab (or default for normal events)
                     if selectedTab == "overview" || event.type != "reunion" {
                         VStack(spacing: 24) {
                             eventImageSection
                             eventInfoSection
                             registerButtons
-
+                            
                             if event.createdByEmail == userSession.email && event.type != "reunion" {
                                 Button(action: {
                                     showPromoterDashboard = true
@@ -116,7 +118,7 @@ struct EventDetailView: View {
                                     .padding(.horizontal)
                                 }
                             }
-
+                            
                             aboutSection
                             mapSection
                             qrCodeSection
@@ -124,7 +126,7 @@ struct EventDetailView: View {
                         }
                         .padding(.top)
                     }
-
+                    
                     // ✅ Dashboard tab — only for reunions
                     else if selectedTab == "dashboard" {
                         ReunionDashboardView(
@@ -146,11 +148,11 @@ struct EventDetailView: View {
         )
         .onAppear {
             DispatchQueue.main.async {
-                    withAnimation {
-                        showHandle = true
-                        appear = true
-                    }
+                withAnimation {
+                    showHandle = true
+                    appear = true
                 }
+            }
             fetchTickets()
             checkIfPromoter()
         }
@@ -190,7 +192,7 @@ struct EventDetailView: View {
         .sheet(isPresented: $showEditView) {
             EditEventView(event: event, onSave: { updated in
                 self.event = updated
-
+                
                 if let index = allEvents.firstIndex(where: { $0.id == updated.id }) {
                     allEvents[index] = updated
                 } else {
@@ -201,7 +203,7 @@ struct EventDetailView: View {
             })
         }
     }
-
+    
     private var eventImageSection: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 20)
@@ -209,7 +211,7 @@ struct EventDetailView: View {
                 .blur(radius: 40)
                 .frame(height: 260)
                 .padding(.horizontal)
-
+            
             if let imageUrl = event.imageUrl,
                !imageUrl.isEmpty,
                let url = URL(string: imageUrl) {
@@ -247,16 +249,16 @@ struct EventDetailView: View {
             }
         }
     }
-
+    
     private var eventInfoSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(event.title)
                     .font(.title.bold())
                     .foregroundColor(.white)
-
+                
                 Spacer()
-
+                
                 if event.createdByEmail == userSession.email {
                     HStack(spacing: 12) {
                         if event.type != "reunion" {
@@ -269,7 +271,7 @@ struct EventDetailView: View {
                                     .background(Color.white.opacity(0.1))
                                     .clipShape(Circle())
                             }
-
+                            
                             Button(action: {
                                 showScannerView = true
                             }) {
@@ -280,7 +282,7 @@ struct EventDetailView: View {
                                     .clipShape(Circle())
                             }
                         }
-
+                        
                         Button(action: {
                             showEditView = true
                         }) {
@@ -302,13 +304,13 @@ struct EventDetailView: View {
                             .clipShape(Circle())
                     }
                 }
-
+                
             }
-
+            
             Text(formattedDate(event.dateTime))
                 .foregroundColor(.white.opacity(0.8))
                 .font(.subheadline)
-
+            
             HStack(spacing: 6) {
                 Image(systemName: "mappin.and.ellipse").foregroundColor(.mint)
                 Text(event.location)
@@ -319,7 +321,7 @@ struct EventDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal)
     }
-
+    
     private var registerButtons: some View {
         HStack(spacing: 16) {
             Button(action: { showRegisterSheet = true }) {
@@ -333,7 +335,7 @@ struct EventDetailView: View {
                 .background(Color.gold)
                 .cornerRadius(16)
             }
-
+            
             Button(action: {
                 startDirectChat()
             }) {
@@ -347,8 +349,8 @@ struct EventDetailView: View {
                 .background(Color.white.opacity(0.08))
                 .cornerRadius(16)
             }
-
-
+            
+            
             Button(action: openShareSheet) {
                 VStack {
                     Image(systemName: "square.and.arrow.up")
@@ -363,7 +365,7 @@ struct EventDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(lang == "es" ? "Informacion" : "About").font(.headline).foregroundColor(.white)
@@ -372,13 +374,13 @@ struct EventDetailView: View {
         }
         .padding(.horizontal)
     }
-
+    
     private var mapSection: some View {
         Group {
             if let coord = coordinate {
                 let region = MKCoordinateRegion(center: coord, span: .init(latitudeDelta: 0.01, longitudeDelta: 0.01))
                 let pin = IdentifiableCoordinate(coordinate: coord)
-
+                
                 VStack(alignment: .leading, spacing: 8) {
                     Text(lang == "es" ? "Ubicacion" : "Location").font(.headline).foregroundColor(.white)
                     Map(coordinateRegion: .constant(region), annotationItems: [pin]) { item in
@@ -392,7 +394,7 @@ struct EventDetailView: View {
             }
         }
     }
-
+    
     private var qrCodeSection: some View {
         Group {
             if isFetchingTickets {
@@ -401,58 +403,31 @@ struct EventDetailView: View {
                     .padding(.top)
             } else {
                 let eventTickets = purchasedTickets.filter { $0.eventId == event.id }
-
+                
                 if !eventTickets.isEmpty {
                     VStack(alignment: .leading, spacing: 16) {
                         Text(lang == "es" ? "🎫 Tus Tickets" : "🎫 Your Tickets")
                             .font(.title2.bold())
                             .foregroundColor(.white)
                             .padding(.horizontal)
-
-                        TabView {
-                            ForEach(eventTickets, id: \.id) { ticket in
-                                VStack(spacing: 16) {
-                                    ZStack {
-                                        RoundedRectangle(cornerRadius: 20)
-                                            .fill(LinearGradient(colors: [.deepNavy, .black], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                            .frame(width: 320, height: 320)
-                                            .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
-
-                                        AsyncImage(url: URL(string: "https://backendevent-etce.onrender.com\(ticket.qrCodeUrl ?? "")")) { image in
-                                            image
-                                                .resizable()
-                                                .interpolation(.none)
-                                                .scaledToFit()
-                                                .frame(width: 240, height: 240)
-                                                .padding()
-                                        } placeholder: {
-                                            ProgressView()
-                                        }
-                                    }
-
-                                    Text("🎟 Ticket #\(ticket.id)")
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .font(.subheadline)
-                                    
-                                    if ["zelle", "pagomovil", "cash"].contains(ticket.paymentMethod.lowercased()) && !ticket.paid {
-                                        Text(lang == "es"
-                                             ? "⏳ Tu pago está pendiente de aprobación por el organizador."
-                                             : "⏳ Your payment is pending approval by the organizer.")
-                                        .font(.footnote)
-                                        .foregroundColor(.orange)
-                                    }
+                        
+                        
+                            TabView {
+                                ForEach(eventTickets, id: \.id) { ticket in
+                                    TicketCardView(ticket: ticket, event: event, lang: lang)
                                 }
-                                .frame(maxWidth: .infinity)
                             }
-                        }
-                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-                        .frame(height: 400)
+                            .frame(height: 410)
+                            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
+                        
                     }
                     .padding(.top)
                 }
             }
         }
     }
+
+
     
     
 
@@ -466,6 +441,8 @@ struct EventDetailView: View {
             }
         }
     }
+    
+    
     
     func startDirectChat() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
@@ -659,6 +636,217 @@ struct EventDetailView: View {
 struct ChatRoomDTO: Codable {
     let id: Int
 }
+
+
+
+// MARK: - Custom Wallet Button View
+struct WalletActionButton: View {
+    let title: String
+    let isLoading: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: { if !isLoading { action() } }) {
+            HStack(spacing: 8) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                }
+                Text(title)
+                    .fontWeight(.semibold)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(Color.black)
+            .foregroundColor(.white)
+            .cornerRadius(8)
+        }
+        .disabled(isLoading)
+    }
+}
+
+// MARK: - Ticket Card View
+struct TicketCardView: View {
+    let ticket: TicketDTO
+    let event: Event
+    let lang: String
+
+    @State private var pkPass: PKPass?
+    @State private var showAdd = false
+    @State private var walletError: String?
+    @State private var isLoading = false
+
+    // Cache passes per ticket in memory
+    private static var passCache: [Int: PKPass] = [:]
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 28)
+                .fill(
+                    LinearGradient(
+                        colors: [.deepNavy.opacity(0.96), .black.opacity(0.92)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: .gold.opacity(0.17), radius: 12, x: 0, y: 7)
+
+            VStack(spacing: 20) {
+                // Tier & price
+                VStack(spacing: 12) {
+                    Text(ticket.tierName ?? "Ticket")
+                        .font(.title2.bold())
+                        .foregroundColor(.gold)
+                        .padding(.vertical, 4)
+                        .padding(.horizontal, 14)
+                        .background(Color.gold.opacity(0.08))
+                        .cornerRadius(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    HStack {
+                        if let price = priceForTicket(ticket, in: event) {
+                            Text(price > 0 ? "$\(String(format: "%.2f", price))" : "FREE")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.78))
+                        } else {
+                            Text("—")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.78))
+                        }
+                        Spacer(minLength: 16)
+                        Image(systemName: "calendar")
+                            .foregroundColor(.gold)
+                        Text(formattedDate(event.dateTime))
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.82))
+                    }
+                }
+
+                // QR Code
+                ZStack {
+                    RoundedRectangle(cornerRadius: 18)
+                        .fill(Color.black.opacity(0.95))
+                        .frame(width: 220, height: 220)
+                    AsyncImage(url: URL(string: "https://backendevent-etce.onrender.com\(ticket.qrCodeUrl ?? "")")) { image in
+                        image.resizable().interpolation(.none).scaledToFit().frame(width: 180, height: 180)
+                    } placeholder: { ProgressView() }
+                }
+
+                // Ticket ID
+                HStack {
+                    Label("Ticket #\(ticket.id)", systemImage: "ticket.fill")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.white.opacity(0.89))
+                }
+
+                // Wallet button
+                if PKAddPassesViewController.canAddPasses() {
+                    WalletActionButton(
+                        title: isLoading ? (lang == "es" ? "Añadiendo..." : "Adding...") : (lang == "es" ? "Añadir a Wallet" : "Add to Wallet"),
+                        isLoading: isLoading
+                    ) {
+                        Task { await fetchAndPresentPass() }
+                    }
+                } else {
+                    Text(lang == "es" ? "Apple Wallet no disponible" : "Apple Wallet not available")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+
+                // Error
+                if let walletError {
+                    Text(walletError)
+                        .font(.footnote)
+                        .foregroundColor(.red)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 4)
+                }
+            }
+            .padding(26)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .sheet(isPresented: $showAdd) {
+            if let pkPass {
+                WalletSheetWrapper(vc: PKAddPassesViewController(pass: pkPass)!)
+            }
+        }
+    }
+
+    // MARK: - Fetch Pass
+    private func fetchAndPresentPass() async {
+        // Use cached pass if available
+        if let cached = Self.passCache[ticket.id] {
+            self.pkPass = cached
+            self.showAdd = true
+            UIImpactFeedbackGenerator(style: .light).impactOccurred() // ✅ haptic success
+            return
+        }
+
+        guard let token = TokenManager.shared.getAccessToken(),
+              let url = URL(string: "https://backendevent-etce.onrender.com/api/passes/ticket/\(ticket.id)") else {
+            await MainActor.run { walletError = "Missing auth or bad URL." }
+            UINotificationFeedbackGenerator().notificationOccurred(.error) // ❌ haptic error
+            return
+        }
+
+        await MainActor.run {
+            isLoading = true
+            walletError = nil
+        }
+
+        do {
+            var req = URLRequest(url: url)
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let (data, resp) = try await URLSession.shared.data(for: req)
+
+            guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
+                throw URLError(.badServerResponse)
+            }
+
+            let pass = try PKPass(data: data)
+            Self.passCache[ticket.id] = pass // ✅ store in cache
+
+            await MainActor.run {
+                self.pkPass = pass
+                self.showAdd = true
+                UIImpactFeedbackGenerator(style: .light).impactOccurred() // ✅ haptic success
+            }
+        } catch {
+            await MainActor.run {
+                walletError = "Wallet error: \(error.localizedDescription)"
+                UINotificationFeedbackGenerator().notificationOccurred(.error) // ❌ haptic error
+            }
+        }
+
+        await MainActor.run { isLoading = false }
+    }
+
+    // MARK: - Helpers
+    func formattedDate(_ isoString: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        guard let date = formatter.date(from: isoString) else { return isoString }
+        let output = DateFormatter()
+        output.dateFormat = "EEEE, MMM d 'at' h:mm a"
+        return output.string(from: date)
+    }
+
+    func priceForTicket(_ ticket: TicketDTO, in event: Event) -> Double? {
+        event.ticketTiers.first(where: { $0.name == ticket.tierName })?.price
+    }
+}
+
+// MARK: - Wallet sheet wrapper
+struct WalletSheetWrapper: UIViewControllerRepresentable {
+    let vc: UIViewController
+    func makeUIViewController(context: Context) -> UIViewController { vc }
+    func updateUIViewController(_ vc: UIViewController, context: Context) {}
+}
+
+
+
+
 
 
 

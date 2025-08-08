@@ -22,14 +22,17 @@ struct CreateEventView: View {
     // Location Info
     @State private var location = ""
     @State private var address = ""
-    @State private var state = "Illinois"
-    @State private var country = "USA"
+    @State private var state = "State"
+    @State private var country = "United States"
     @State private var latitude: Double? = nil
     @State private var longitude: Double? = nil
+    let countries = Locale.isoRegionCodes.compactMap { Locale.current.localizedString(forRegionCode: $0) }.sorted()
+    @State private var showGooglePlacesAutocomplete = false
 
     // Image
     @State private var selectedItem: PhotosPickerItem? = nil
     @State private var previewImage: UIImage? = nil
+    @State private var showImagePicker = false // Add this to your @State vars if not present
     @State private var imageUrl = ""
 
     // Tickets
@@ -48,6 +51,9 @@ struct CreateEventView: View {
     @State private var newEvent: Event? = nil
     @State private var showSuccessOverlay = false
     @State private var showSpinner = true
+    @State private var showFieldError = false
+    @State private var fieldErrorMessage = ""
+
     
     @State private var eventType: String? = nil // "event" or "reunion"
     @State private var showTypeInfo = false
@@ -84,10 +90,45 @@ struct CreateEventView: View {
     @State private var isSearching = false
     @State private var searchError = ""
     @FocusState private var isUsernameFocused: Bool
+    
+    @State private var listOnly = false
+    @State private var guestListFilename = ""
+    @State private var guestListUrl = ""
+    @State private var showFileImporter = false
+    
+
+    @State private var addressSuggestions: [GPlacePrediction] = []
+    @State private var isAddressSearching = false
+    @FocusState private var isAddressFieldFocused: Bool // New: for keyboard control
 
 
+    @State private var addressQuery = ""
 
-    let states = ["Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"]
+    
+
+
+    let countryStates: [String: [String]] = [
+        "United States": [
+            "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut", "Delaware",
+            "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa", "Kansas", "Kentucky",
+            "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan", "Minnesota", "Mississippi",
+            "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire", "New Jersey", "New Mexico",
+            "New York", "North Carolina", "North Dakota", "Ohio", "Oklahoma", "Oregon", "Pennsylvania",
+            "Rhode Island", "South Carolina", "South Dakota", "Tennessee", "Texas", "Utah", "Vermont",
+            "Virginia", "Washington", "West Virginia", "Wisconsin", "Wyoming"
+        ],
+        "Venezuela": [
+            "Amazonas", "Anzoátegui", "Apure", "Aragua", "Barinas", "Bolívar", "Carabobo", "Cojedes",
+            "Delta Amacuro", "Distrito Capital", "Falcón", "Guárico", "Lara", "Mérida", "Miranda", "Monagas",
+            "Nueva Esparta", "Portuguesa", "Sucre", "Táchira", "Trujillo", "La Guaira", "Yaracuy", "Zulia"
+        ]
+    ]
+    
+    var statesForSelectedCountry: [String] {
+        countryStates[country] ?? []
+    }
+
+
 
     var body: some View {
         NavigationStack {
@@ -101,22 +142,21 @@ struct CreateEventView: View {
                     VStack {
                         // Step Indicators
                         HStack(spacing: 12) {
+                            
                             stepCircle(index: 0, icon: "text.bubble")
                             stepCircle(index: 1, icon: "mappin.and.ellipse")
-                            stepCircle(index: 2, icon: "photo.on.rectangle")
-                            stepCircle(index: 3, icon: "ticket.fill")
+                            stepCircle(index: 2, icon: "ticket.fill")
                         }
                         .padding(.top, 20)
 
                         TabView(selection: $step) {
                             stepEventInfo.tag(0)
                             stepLocation.tag(1)
-                            stepImage.tag(2)
 
                             if eventType == "event" {
-                                stepTickets.tag(3)
+                                stepTickets.tag(2)
                             } else if eventType == "reunion" {
-                                stepReunionBudget.tag(3)
+                                stepReunionBudget.tag(2)
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
@@ -125,7 +165,52 @@ struct CreateEventView: View {
                         Spacer()
 
                         Button(action: {
-                            if step < 3 {
+                            var shouldBlock = false
+                            var message = ""
+
+                            switch step {
+                            case 0:
+                                if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    shouldBlock = true
+                                    message = lang == "es"
+                                        ? "Por favor, ingresa el título del evento."
+                                        : "Please enter the event title."
+                                }
+                            case 1:
+                                // Validate location and address (choose which is required for you)
+                                if location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                    || address.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    shouldBlock = true
+                                    message = lang == "es"
+                                        ? "Por favor, completa la ubicación del evento."
+                                        : "Please enter the event location."
+                                }
+                            case 2:
+                                if ticketTiers.isEmpty {
+                                    shouldBlock = true
+                                    message = lang == "es"
+                                        ? "Agrega al menos un nivel de entrada."
+                                        : "Add at least one ticket tier."
+                                }
+                                // (Optionally, if you want to force tierName when creating a new one)
+                                // if tierName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { ... }
+                            default:
+                                break
+                            }
+
+                            if shouldBlock {
+                                fieldErrorMessage = message
+                                showFieldError = true
+                                let generator = UINotificationFeedbackGenerator()
+                                generator.notificationOccurred(.error)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
+                                    withAnimation { showFieldError = false }
+                                }
+                                return
+                            }
+
+                            // If valid, continue to next step or submit
+                            if step < 2 {
                                 step += 1
                             } else {
                                 geocodeAndCreateEvent()
@@ -148,7 +233,7 @@ struct CreateEventView: View {
                             }
                         }
                         .padding()
-                        .disabled(isLoading || (step == 0 && title.isEmpty))
+                        .disabled(isLoading)
                     }
                 }
             }
@@ -171,6 +256,15 @@ struct CreateEventView: View {
                     )
                 }
             }
+            .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.pdf]) { result in
+                switch result {
+                case .success(let url):
+                    guestListFilename = url.lastPathComponent
+                    uploadGuestListPdf(fileUrl: url)
+                case .failure:
+                    print("Failed to select file")
+                }
+            }
             .onChange(of: showAdminChat) { isPresented in
                 if !isPresented {
                     refreshUserSession()
@@ -184,26 +278,86 @@ struct CreateEventView: View {
             resetForm()
         }
         .overlay(
-            Group {
+            ZStack {
+                // Top animated error bar
+                VStack {
+                    if showFieldError {
+                        Text(fieldErrorMessage)
+                            .font(.subheadline.bold())
+                            .foregroundColor(.white)
+                            .padding(.vertical, 10)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.red.opacity(0.97))
+                            .cornerRadius(12)
+                            .padding(.horizontal, 18)
+                            .shadow(radius: 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .zIndex(10)
+                    }
+                    Spacer()
+                }
+                // Fullscreen event created overlay
                 if showSuccessOverlay {
                     ZStack {
-                        Color.black.opacity(0.5)
+                        // Dim background
+                        Color.black.opacity(0.65)
                             .ignoresSafeArea()
-                        VStack(spacing: 16) {
+                            .blur(radius: 2)
+
+                        VStack(spacing: 22) {
+                            // Animated checkmark with gold glow
+                            ZStack {
+                                Circle()
+                                    .fill(Color.gold.opacity(0.16))
+                                    .frame(width: 82, height: 82)
+                                Circle()
+                                    .stroke(Color.gold, lineWidth: 3)
+                                    .frame(width: 74, height: 74)
+                                    .shadow(color: .gold.opacity(0.7), radius: 12, y: 4)
+                                Image(systemName: "checkmark.seal.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 46, height: 46)
+                                    .foregroundColor(.gold)
+                                    .shadow(color: .gold, radius: 8)
+                            }
+                            .scaleEffect(showSpinner ? 0.8 : 1.1)
+                            .opacity(showSpinner ? 0.7 : 1.0)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showSpinner)
+
+                            // Headline
+                            Text(lang == "es" ? "¡Evento creado!" : "Event Created!")
+                                .font(.title.bold())
+                                .foregroundColor(.white)
+                                .shadow(color: .black.opacity(0.21), radius: 4, y: 2)
+
+                            // Subheadline or loading indicator
                             if showSpinner {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.5)
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .gold))
+                                    .scaleEffect(1.15)
+                                    .padding(.top, 4)
                                     .transition(.opacity)
+                            } else {
+                                Text(lang == "es"
+                                     ? "Tu evento está listo. Redirigiendo..."
+                                     : "Your event is ready. Redirecting...")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
                             }
-                            Text(lang == "es" ? "¡Evento creado!" : "Event Created!")
-                                .font(.title2.bold())
-                                .foregroundColor(.white)
                         }
-                        .padding()
-                        .background(Color.black.opacity(0.8))
-                        .cornerRadius(16)
-                        .transition(.opacity)
+                        .padding(.vertical, 36)
+                        .padding(.horizontal, 30)
+                        .background(
+                            BlurView(style: .systemUltraThinMaterialDark)
+                                .background(Color.black.opacity(0.28))
+                        )
+                        .cornerRadius(28)
+                        .shadow(color: .gold.opacity(0.18), radius: 22, y: 8)
+                        .padding(.horizontal, 26)
+                        .transition(.scale.combined(with: .opacity))
                     }
                 }
             }
@@ -211,6 +365,88 @@ struct CreateEventView: View {
     }
 
     // MARK: - Step Indicators
+    func fetchPlaceDetail(_ placeId: String) {
+        let apiKey = "AIzaSyAsSjybISIywrdMNKMVrKrhgDIQdX1r4pA"
+        let langParam = lang
+        let urlString = "https://maps.googleapis.com/maps/api/place/details/json?place_id=\(placeId)&key=\(apiKey)&language=\(langParam)"
+        guard let url = URL(string: urlString) else { return }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = json["result"] as? [String: Any] else { return }
+            DispatchQueue.main.async {
+                if let geometry = result["geometry"] as? [String: Any],
+                   let loc = geometry["location"] as? [String: Any],
+                   let lat = loc["lat"] as? Double,
+                   let lng = loc["lng"] as? Double {
+                    latitude = lat
+                    longitude = lng
+                }
+                if let addr = result["formatted_address"] as? String {
+                    address = addr
+                    addressQuery = addr
+                }
+                // Optional: Extract city if you want
+                if let addressComponents = result["address_components"] as? [[String: Any]] {
+                    if let cityComponent = addressComponents.first(where: { ($0["types"] as? [String])?.contains("locality") ?? false }) {
+                        location = cityComponent["long_name"] as? String ?? ""
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    
+    func fetchAddressSuggestions(_ input: String) {
+        guard !input.isEmpty else {
+            addressSuggestions = []
+            return
+        }
+        let apiKey = "AIzaSyAsSjybISIywrdMNKMVrKrhgDIQdX1r4pA"
+        let langParam = lang
+        let inputEncoded = input.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let urlString = "https://maps.googleapis.com/maps/api/place/autocomplete/json?input=\(inputEncoded)&key=\(apiKey)&language=\(langParam)"
+        guard let url = URL(string: urlString) else { return }
+
+        isAddressSearching = true
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            DispatchQueue.main.async {
+                isAddressSearching = false
+                guard let data = data else {
+                    print("No data returned from Google Places")
+                    addressSuggestions = []
+                    return
+                }
+
+                // 👇👇👇 PRINT THE RAW RESPONSE
+                print("Raw address suggestion response:")
+                print(String(data: data, encoding: .utf8) ?? "nil")
+
+                guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                    print("Failed to decode JSON")
+                    addressSuggestions = []
+                    return
+                }
+                print("Decoded JSON:", json)
+
+                guard let predictions = json["predictions"] as? [[String: Any]] else {
+                    print("No predictions key in JSON")
+                    addressSuggestions = []
+                    return
+                }
+                print("Predictions:", predictions)
+
+                addressSuggestions = predictions.compactMap {
+                    guard let desc = $0["description"] as? String, let placeId = $0["place_id"] as? String else { return nil }
+                    return GPlacePrediction(description: desc, placeId: placeId)
+                }
+                print("addressSuggestions updated:", addressSuggestions)
+            }
+        }.resume()
+    }
+
+
+    
     func stepCircle(index: Int, icon: String) -> some View {
         Circle()
             .fill(step >= index ? Color.gold : Color.white.opacity(0.2))
@@ -220,64 +456,99 @@ struct CreateEventView: View {
     }
 
     var stepEventInfo: some View {
-        VStack(spacing: 24) {
-            Text(lang == "es" ? "🎯 Información del evento" : "🎯 Event Info")
-                .font(.title2.bold())
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top)
-
-            CustomInputField(icon: "textformat", placeholder: lang == "es" ? "Título del evento" : "Event Title", text: $title)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: "doc.text")
-                        .foregroundColor(.white.opacity(0.7))
-                    Text(lang == "es" ? "Descripción" : "Description")
-                        .foregroundColor(.white.opacity(0.7))
-                        .font(.subheadline)
-                }
-
-                ZStack(alignment: .topLeading) {
-                    if description.isEmpty {
-                        Text(lang == "es" ? "Escribe una descripción..." : "Write a description...")
-                            .foregroundColor(.gray)
-                            .padding(.horizontal, 12)
-                            .padding(.top, 12)
+        ScrollView {
+            VStack(spacing: 24) {
+                // --- Cover Image Section ---
+                PhotosPicker(
+                    selection: $selectedItem,
+                    matching: .images,
+                    photoLibrary: .shared()
+                ) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(style: StrokeStyle(lineWidth: 2, dash: [8]))
+                            .foregroundColor(Color.white.opacity(0.35))
+                            .background(Color.white.opacity(0.04).cornerRadius(16))
+                            .frame(height: 140)
+                        
+                        if let previewImage = previewImage {
+                            Image(uiImage: previewImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 140)
+                                .clipped()
+                                .cornerRadius(16)
+                        } else {
+                            VStack(spacing: 10) {
+                                Image(systemName: "camera")
+                                    .font(.system(size: 28, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                                Text(lang == "es" ? "Agregar imagen de portada" : "Add cover image")
+                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.body)
+                            }
+                        }
                     }
-
-                    TextEditor(text: $description)
-                        .frame(height: 100)
-                        .padding(12)
-                        .background(Color.white.opacity(0.05))
+                }
+                
+                // --- Event Info Fields ---
+                Text(lang == "es" ? "🎯 Información del evento" : "🎯 Event Info")
+                    .font(.title2.bold())
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 6)
+                
+                CustomInputField(icon: "textformat", placeholder: lang == "es" ? "Título del evento" : "Event Title", text: $title)
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "doc.text")
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(lang == "es" ? "Descripción" : "Description")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.subheadline)
+                    }
+                    ZStack(alignment: .topLeading) {
+                        if description.isEmpty {
+                            Text(lang == "es" ? "Escribe una descripción..." : "Write a description...")
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 12)
+                                .padding(.top, 12)
+                        }
+                        TextEditor(text: $description)
+                            .frame(height: 100)
+                            .padding(12)
+                            .background(Color.white.opacity(0.05))
+                            .cornerRadius(12)
+                            .foregroundColor(.white)
+                            .scrollContentBackground(.hidden)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "calendar")
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(lang == "es" ? "Fecha y hora del evento" : "Event Date & Time")
+                            .foregroundColor(.white.opacity(0.7))
+                            .font(.subheadline)
+                    }
+                    DatePicker("", selection: $date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.white.opacity(0.10))
                         .cornerRadius(12)
                         .foregroundColor(.white)
-                        .scrollContentBackground(.hidden)
                 }
             }
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Image(systemName: "calendar")
-                        .foregroundColor(.white.opacity(0.7))
-                    Text(lang == "es" ? "Fecha y hora del evento" : "Event Date & Time")
-                        .foregroundColor(.white.opacity(0.7))
-                        .font(.subheadline)
-                }
-
-                DatePicker("", selection: $date)
-                    .labelsHidden()
-                    .datePickerStyle(.compact)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.white.opacity(0.10))
-                    .cornerRadius(12)
-                    .foregroundColor(.white)
+            .padding(.horizontal)
+            .padding(.vertical, 12)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             }
-
-            Spacer()
         }
-        .padding(.horizontal)
     }
     
     var eventTypePicker: some View {
@@ -295,7 +566,7 @@ struct CreateEventView: View {
                     type: "event"
                 )
                 eventTypeButton(
-                    title: lang == "es" ? "Meeting" : "Reunion",
+                    title: lang == "es" ? "Reunion" : "Meeting",
                     icon: "person.3.fill",
                     description: lang == "es" ? "Gratis. Comparte presupuesto y organiza juntos." : "Free. Split budget and plan together.",
                     type: "reunion"
@@ -527,6 +798,9 @@ struct CreateEventView: View {
                 Spacer(minLength: 40)
             }
             .padding(.horizontal)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 
@@ -540,181 +814,364 @@ struct CreateEventView: View {
 
             CustomInputField(
                 icon: "mappin.and.ellipse",
-                placeholder: lang == "es" ? "Ciudad / Lugar" : "City / Venue",
+                placeholder: lang == "es" ? "Ciudad" : "City",
                 text: $location
             )
 
-            CustomInputField(
-                icon: "house",
-                placeholder: lang == "es" ? "Dirección" : "Street Address",
-                text: $address
-            )
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Image(systemName: "house")
+                        .foregroundColor(.white.opacity(0.7))
+                    TextField(
+                        address.isEmpty ? (lang == "es" ? "Dirección (busca con Google)" : "Street Address (Search with Google)") : address,
+                        text: $addressQuery,
+                        prompt: Text(lang == "es" ? "Dirección (busca con Google)" : "Street Address (Search with Google)").foregroundColor(.gray)
+                    )
+                    .focused($isAddressFieldFocused)
+                    .onChange(of: addressQuery) { newValue in
+                        // Only search if user isn't clicking a suggestion (avoids double-fetch)
+                        if newValue != address { fetchAddressSuggestions(newValue) }
+                    }
+                    .foregroundColor(.white)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+                    
+                    // 🔥 X button to clear
+                    if !addressQuery.isEmpty {
+                        Button(action: {
+                            addressQuery = ""
+                            address = ""
+                            addressSuggestions = []
+                            isAddressFieldFocused = true
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(12)
+                
+                // Spinner while searching
+                if isAddressSearching {
+                    HStack { Spacer(); ProgressView().padding(.vertical, 10); Spacer() }
+                }
+                // Dropdown
+                else if !addressSuggestions.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(addressSuggestions) { suggestion in
+                            Button(action: {
+                                addressQuery = suggestion.description
+                                address = suggestion.description
+                                addressSuggestions = []
+                                fetchPlaceDetail(suggestion.placeId)
+                                // Dismiss keyboard
+                                isAddressFieldFocused = false
+                                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                            }) {
+                                Text(suggestion.description)
+                                    .foregroundColor(.white)
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(Color.white.opacity(0.1))
+                            }
+                        }
+                    }
+                    .background(Color.black.opacity(0.94))
+                    .cornerRadius(12)
+                    .shadow(radius: 4)
+                    .padding(.top, -8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .padding(.bottom, 12)
+            .onTapGesture {
+                // Dismiss keyboard if tap outside
+                isAddressFieldFocused = false
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
 
-            CustomInputField(
-                icon: "globe",
-                placeholder: lang == "es" ? "País" : "Country",
-                text: $country
-            )
 
             CustomDropdown(
-                label: lang == "es" ? "Seleccionar Estado" : "Select State",
-                selection: $state,
-                options: states
+                label: lang == "es" ? "Seleccionar país" : "Select Country",
+                selection: $country,
+                options: countries
             )
-        }
-        .padding(.horizontal)
-    }
 
-    var stepImage: some View {
-        VStack(spacing: 20) {
-            Text(lang == "es" ? "📸 Imagen del Evento" : "📸 Event Image")
-                .font(.title.bold())
-                .foregroundColor(.white)
-
-            if let previewImage = previewImage {
-                Image(uiImage: previewImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 200)
-                    .cornerRadius(16)
-                    .shadow(radius: 10)
-            }
-
-            PhotosPicker(selection: $selectedItem, matching: .images) {
-                Text(lang == "es" ? "Seleccionar Imagen" : "Select Image")
-                    .fontWeight(.bold)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.gold)
-                    .foregroundColor(.black)
-                    .cornerRadius(12)
+            if !statesForSelectedCountry.isEmpty {
+                CustomDropdown(
+                    label: lang == "es" ? "Seleccionar Estado" : "Select State",
+                    selection: $state,
+                    options: statesForSelectedCountry
+                )
+            } else {
+                CustomInputField(
+                    icon: "building.2",
+                    placeholder: lang == "es" ? "Estado / Provincia" : "State / Province",
+                    text: $state
+                )
             }
         }
         .padding(.horizontal)
+        .onChange(of: country) { _ in
+            state = statesForSelectedCountry.first ?? ""
+        }
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
+
+    
 
     var stepTickets: some View {
         ScrollView {
-            VStack(spacing: 20) {
+            VStack(spacing: 28) {
                 Text(lang == "es" ? "🎟 Niveles de Entradas" : "🎟 Ticket Tiers")
-                    .font(.title.bold())
+                    .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.white)
+                    .padding(.top, 8)
 
-                // Input Section (moved to subview)
-                TierInputView(
-                    tierName: $tierName,
-                    tierPrice: $tierPrice,
-                    tierQuantity: $tierQuantity,
-                    tierOrder: $tierOrder,
-                    tierStartDate: $tierStartDate,
-                    tierEndDate: $tierEndDate,
-                    showTierOptions: $showTierOptions,
-                    lang: lang
-                )
+                TicketTiersPreview // 👈
+                Divider().background(Color.white.opacity(0.15))
 
-                // Add Tier Button
-                Button(action: {
-                    guard let price = Double(tierPrice),
-                          let qty = Int(tierQuantity),
-                          let order = Int(tierOrder),
-                          !tierName.isEmpty else {
-                        return
-                    }
+                TierCreationSection // 👈
+                Divider().background(Color.white.opacity(0.18))
 
-                    let newTier = TicketTierRequest(
-                        name: tierName,
-                        price: price,
-                        quantity: qty,
-                        order: order,
-                        startTime: showTierOptions ? tierStartDate : nil,
-                        endTime: showTierOptions ? tierEndDate : nil
-                    )
+                PaymentMethodsSection // 👈
+                Divider().background(Color.white.opacity(0.16))
 
-                    ticketTiers.append(newTier)
-
-                    // Reset fields
-                    tierName = ""
-                    tierPrice = ""
-                    tierQuantity = ""
-                    tierOrder = ""
-                    showTierOptions = false
-                }) {
-                    Text(lang == "es" ? "Agregar Nivel" : "Add Tier")
-                        .font(.subheadline.bold())
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.gold)
-                        .foregroundColor(.black)
-                        .cornerRadius(12)
-                }
-
-                Divider().background(Color.white.opacity(0.2))
-
-                // Zelle input toggle
-                ZelleToggleView(
-                    showFields: $showZelleFields,
-                    zelleEmail: $zelleEmail,
-                    zellePhone: $zellePhone,
-                    lang: lang
-                )
-                
-                if country.lowercased() == "venezuela" {
-                    Divider().background(Color.white.opacity(0.3))
-
-                    Toggle(lang == "es" ? "💳 Aceptar Pago Móvil" : "💳 Accept Pago Móvil", isOn: $allowPagoMovil)
-                        .toggleStyle(SwitchToggleStyle(tint: .gold))
-                        .foregroundColor(.white)
-
-                    if allowPagoMovil {
-                        CustomInputField(
-                            icon: "phone",
-                            placeholder: lang == "es" ? "Teléfono Pago Móvil" : "Pago Móvil Phone",
-                            text: $pagoMovilPhone
-                        )
-                        CustomInputField(
-                            icon: "idcard",
-                            placeholder: lang == "es" ? "Cédula de Identidad" : "National ID (CI)",
-                            text: $pagoMovilCi
-                        )
-                        CustomInputField(
-                            icon: "building.2",
-                            placeholder: lang == "es" ? "Banco" : "Bank",
-                            text: $pagoMovilBank
-                        )
-                    }
-
-                    Toggle(lang == "es" ? "💵 Aceptar Efectivo" : "💵 Accept Cash", isOn: $allowCash)
-                        .toggleStyle(SwitchToggleStyle(tint: .gold))
-                        .foregroundColor(.white)
-
-                    if allowCash {
-                        CustomInputField(
-                            icon: "text.bubble",
-                            placeholder: lang == "es"
-                                ? "Nota para mostrar al comprador (ej: pagar en la puerta)"
-                                : "Note for the buyer (e.g. pay at the door)",
-                            text: $cashNote
-                        )
-                    }
-                }
-
-                // Preview List (moved to subview)
-                TierPreviewList(
-                    ticketTiers: ticketTiers,
-                    lang: lang,
-                    formattedDate: formattedDate,
-                    removeTier: { id in
-                        ticketTiers.removeAll { $0.id == id }
-                    }
-                )
+                MoreOptionsSection // 👈
 
                 Spacer(minLength: 100)
             }
             .padding(.horizontal)
             .padding(.bottom, 32)
+            .onTapGesture {
+                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            }
         }
     }
 
+    private var TicketTiersPreview: some View {
+        Group {
+            if !ticketTiers.isEmpty {
+                VStack(spacing: 16) {
+                    ForEach(ticketTiers.indices, id: \.self) { idx in
+                        let tier = ticketTiers[idx]
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(lang == "es" ? "Nivel" : "Tier") \(idx + 1): \(tier.name)")
+                                    .font(.headline)
+                                    .foregroundColor(.gold)
+                                Text("$\(tier.price, specifier: "%.2f") • \(tier.quantity) \(lang == "es" ? "entradas" : "tickets")")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.8))
+                                if let start = tier.startTime {
+                                    Text("\(lang == "es" ? "Desde" : "From"): \(formattedDate(start))")
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.65))
+                                }
+                                if let end = tier.endTime {
+                                    Text("\(lang == "es" ? "Hasta" : "Until"): \(formattedDate(end))")
+                                        .font(.caption2)
+                                        .foregroundColor(.white.opacity(0.65))
+                                }
+                            }
+                            Spacer()
+                            Button {
+                                ticketTiers.remove(at: idx)
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.title2)
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(16)
+                        .shadow(color: .black.opacity(0.16), radius: 7, y: 4)
+                        .animation(.spring(), value: ticketTiers.count)
+                    }
+                }
+            }
+        }
+    }
+
+    private var TierCreationSection: some View {
+        VStack(spacing: 10) {
+            Text(lang == "es" ? "Crear nuevo nivel" : "Add New Tier")
+                .font(.headline)
+                .foregroundColor(.white)
+            CustomInputField(
+                icon: "ticket",
+                placeholder: lang == "es" ? "Nombre del nivel" : "Tier Name",
+                text: $tierName
+            )
+            CustomInputField(
+                icon: "dollarsign.circle",
+                placeholder: lang == "es" ? "Precio" : "Price (USD)",
+                text: $tierPrice,
+                keyboard: .decimalPad
+            )
+            CustomInputField(
+                icon: "number",
+                placeholder: lang == "es" ? "Cantidad" : "Quantity",
+                text: $tierQuantity,
+                keyboard: .numberPad
+            )
+            if showTierOptions {
+                DatePicker(
+                    lang == "es" ? "Inicio de venta" : "Sale Start",
+                    selection: $tierStartDate,
+                    
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .foregroundColor(.white)
+                DatePicker(
+                    lang == "es" ? "Fin de venta" : "Sale End",
+                    selection: $tierEndDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .foregroundColor(.white)
+            }
+            Button {
+                withAnimation { showTierOptions.toggle() }
+            } label: {
+                Text(showTierOptions
+                    ? (lang == "es" ? "Ocultar Opciones" : "Hide Options")
+                    : (lang == "es" ? "Opciones avanzadas" : "Advanced Options"))
+                    .font(.caption)
+                    .foregroundColor(.gold)
+            }
+            Button(action: {
+                guard let price = Double(tierPrice),
+                      let qty = Int(tierQuantity),
+                      !tierName.isEmpty else { return }
+
+                let newTier = TicketTierRequest(
+                    name: tierName,
+                    price: price,
+                    quantity: qty,
+                    order: ticketTiers.count,
+                    startTime: showTierOptions ? tierStartDate : nil,
+                    endTime: showTierOptions ? tierEndDate : nil
+                )
+                ticketTiers.append(newTier)
+                tierName = ""
+                tierPrice = ""
+                tierQuantity = ""
+                showTierOptions = false
+            }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text(lang == "es" ? "Agregar Nivel" : "Add Tier")
+                }
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.black)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.gold)
+                .cornerRadius(14)
+                .shadow(color: .gold.opacity(0.23), radius: 8, y: 2)
+            }
+            .padding(.top, 6)
+        }
+        .padding()
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(18)
+    }
+
+    private var PaymentMethodsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(lang == "es" ? "Métodos de Pago" : "Payment Methods")
+                .font(.headline)
+                .foregroundColor(.white)
+
+            ZelleToggleView(
+                showFields: $showZelleFields,
+                zelleEmail: $zelleEmail,
+                zellePhone: $zellePhone,
+                lang: lang
+            )
+
+            if country.lowercased() == "venezuela" {
+                Divider().background(Color.white.opacity(0.2))
+                Toggle(lang == "es" ? "💳 Aceptar Pago Móvil" : "💳 Accept Pago Móvil", isOn: $allowPagoMovil)
+                    .toggleStyle(SwitchToggleStyle(tint: .gold))
+                    .foregroundColor(.white)
+                if allowPagoMovil {
+                    CustomInputField(
+                        icon: "phone",
+                        placeholder: lang == "es" ? "Teléfono Pago Móvil" : "Pago Móvil Phone",
+                        text: $pagoMovilPhone
+                    )
+                    CustomInputField(
+                        icon: "idcard",
+                        placeholder: lang == "es" ? "Cédula de Identidad" : "National ID (CI)",
+                        text: $pagoMovilCi
+                    )
+                    CustomInputField(
+                        icon: "building.2",
+                        placeholder: lang == "es" ? "Banco" : "Bank",
+                        text: $pagoMovilBank
+                    )
+                }
+                Toggle(lang == "es" ? "💵 Aceptar Efectivo" : "💵 Accept Cash", isOn: $allowCash)
+                    .toggleStyle(SwitchToggleStyle(tint: .gold))
+                    .foregroundColor(.white)
+                if allowCash {
+                    CustomInputField(
+                        icon: "text.bubble",
+                        placeholder: lang == "es"
+                            ? "Nota para mostrar al comprador (ej: pagar en la puerta)"
+                            : "Note for the buyer (e.g. pay at the door)",
+                        text: $cashNote
+                    )
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(18)
+    }
+
+    private var MoreOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(lang == "es" ? "Más Opciones" : "More Options")
+                .font(.headline)
+                .foregroundColor(.white)
+            Toggle(lang == "es" ? "Solo Lista de Espera" : "List-Only Access", isOn: $listOnly)
+                .toggleStyle(SwitchToggleStyle(tint: .gold))
+                .foregroundStyle(.white)
+                .padding(.top, 4)
+            if listOnly {
+                VStack(spacing: 8) {
+                    Text(lang == "es" ? "Sube una lista PDF (opcional)" : "Upload guest list PDF (optional)")
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.7))
+                    Button {
+                        showFileImporter = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.fill")
+                            Text(guestListFilename.isEmpty ? (lang == "es" ? "Seleccionar Archivo" : "Choose File") : guestListFilename)
+                        }
+                        .foregroundColor(.white)
+                        .padding(10)
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.08))
+        .cornerRadius(18)
+    }
+
+    
 
 
     // MARK: - Logic
@@ -768,6 +1225,7 @@ struct CreateEventView: View {
     func createEvent() {
         guard let token = TokenManager.shared.getAccessToken(),
               let url = URL(string: "https://backendevent-etce.onrender.com/events") else { return }
+        print("🔐 Access Token: \(token)")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -783,6 +1241,8 @@ struct CreateEventView: View {
             "state": state,
             "address": address,
             "country": country,
+            "listOnly": listOnly,
+            "guestListPdf": guestListUrl,
             "latitude": latitude ?? 0.0,
             "longitude": longitude ?? 0.0,
             "dateTime": ISO8601DateFormatter().string(from: date),
@@ -1028,6 +1488,35 @@ struct CreateEventView: View {
         formatter.dateFormat = "MMM d, h:mm a"
         return formatter.string(from: date)
     }
+    
+    func uploadGuestListPdf(fileUrl: URL) {
+        guard let token = TokenManager.shared.getAccessToken() else { return }
+        var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/events/upload-guestlist")!)
+        request.httpMethod = "POST"
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        var data = Data()
+        data.append("--\(boundary)\r\n")
+        data.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(fileUrl.lastPathComponent)\"\r\n")
+        data.append("Content-Type: application/pdf\r\n\r\n")
+        if let fileData = try? Data(contentsOf: fileUrl) {
+            data.append(fileData)
+        }
+        data.append("\r\n--\(boundary)--\r\n")
+
+        request.httpBody = data
+
+        URLSession.shared.dataTask(with: request) { responseData, _, _ in
+            guard let responseData = responseData else { return }
+            if let result = try? JSONDecoder().decode([String: String].self, from: responseData),
+               let url = result["url"] {
+                guestListUrl = url
+            }
+        }.resume()
+    }
+
 
 
     func uploadSelectedImage() {
@@ -1144,8 +1633,9 @@ struct CreateEventView: View {
         date = Date()
         location = ""
         address = ""
-        state = "Illinois"
-        country = "USA"
+        addressQuery = ""
+        state = ""
+        country = "United States"
         latitude = nil
         longitude = nil
         selectedItem = nil
@@ -1263,6 +1753,10 @@ struct ZelleToggleView: View {
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
+            
+        }
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         }
     }
 }
@@ -1350,7 +1844,16 @@ struct TierInputView: View {
                 }
             }
         }
+        .onTapGesture {
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        }
     }
+}
+
+struct GPlacePrediction: Identifiable {
+    let id = UUID()
+    let description: String
+    let placeId: String
 }
 
 struct ChatRoomIdResponse: Decodable {

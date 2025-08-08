@@ -4,9 +4,11 @@ struct AppRootView: View {
     @AppStorage("isLoggedIn", store: UserDefaults.standard) private var isLoggedIn = false
     @AppStorage("hasPassword", store: UserDefaults.standard) private var hasPassword = false
     @AppStorage("hasUsername") var hasUsername = false
-
+    
     @State private var showSplash = true
-
+    
+    @Binding var deepLinkEventId: String?
+    
     var body: some View {
         if showSplash {
             SplashView(finishSplash: {
@@ -15,9 +17,9 @@ struct AppRootView: View {
         } else {
             if isLoggedIn {
                 if hasPassword {
-                    if hasUsername{
-                        MainTabView()
-                    }else{
+                    if hasUsername {
+                        MainTabView(deepLinkEventId: $deepLinkEventId) // <--
+                    } else {
                         SetUsernameView()
                     }
                 } else {

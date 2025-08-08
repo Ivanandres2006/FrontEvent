@@ -84,7 +84,7 @@ struct ChatView: View {
                     if let post = post {
                         self.fullResalePost = post
                         self.paymentComplete = post.sold
-                        self.fetchEventDetails(eventId: post.eventId)
+                        self.fetchEventDetails(eventId: post.eventId!)
                     } else {
                         print("❌ Could not load resale post")
                     }

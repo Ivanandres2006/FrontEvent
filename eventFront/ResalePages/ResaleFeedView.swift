@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ResaleFeedView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
@@ -18,6 +19,10 @@ struct ResaleFeedView: View {
     @State private var selectedBuyNowPost: ResalePostDTO? = nil
 
     @State private var unreadCount: Int = 0
+    
+    @State private var showToast = false
+    @State private var toastText = ""
+
 
     var body: some View {
         NavigationStack {
@@ -26,8 +31,16 @@ struct ResaleFeedView: View {
                     .ignoresSafeArea()
 
                 if isLoading {
-                    ProgressView(lang == "es" ? "Cargando Publicaciones de Reventa..." : "Loading Resale Posts...")
-                        .foregroundColor(.white)
+                    VStack {
+                        Spacer()
+                        ProgressView(lang == "es" ? "Cargando Publicaciones de Reventa..." : "Loading Resale Posts...")
+                            .foregroundColor(.white)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .gold))
+                        Spacer()
+                    }
+                    .transition(.opacity)
+                    .animation(.easeInOut(duration: 0.3), value: isLoading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if posts.isEmpty {
                     VStack(spacing: 20) {
                         Image(systemName: "ticket")
@@ -96,6 +109,32 @@ struct ResaleFeedView: View {
                 }
                 .padding(.top, 16)
                 .padding(.trailing, 20)
+                
+                // 🔻 Bottom toast overlay
+                if showToast {
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 10) {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .foregroundColor(.white)
+                            Text(toastText)
+                                .foregroundColor(.white)
+                                .font(.footnote.weight(.semibold))
+                                .lineLimit(2)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color.red.opacity(0.95))
+                                .shadow(radius: 12, y: 6)
+                        )
+                        .padding(.horizontal, 16)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    .padding(.bottom, 18) // sits just above home bar
+                }
             }
             .navigationTitle("Ticket Resale")
             .navigationBarTitleDisplayMode(.inline)
@@ -121,16 +160,13 @@ struct ResaleFeedView: View {
                     .environmentObject(userSession)
             }
             .sheet(item: $selectedBuyNowPost) { post in
-                if let event = findEvent(for: post) {
-                    BuyNowView(
-                        resalePost: post,
-                        event: .constant(event),
-                        userEmail: userSession.email,
-                        onComplete: { fetchResalePosts() }
-                    )
-                } else {
-                    Text(lang == "es" ? "Evento no encontrado" : "Event not found")
-                }
+                // Pass a minimal Event just with id and title to trigger loading spinner
+                BuyNowView(
+                    resalePost: post,
+                    event: .constant(Event(id: post.eventId ?? -1, title: post.eventTitle)),
+                    userEmail: userSession.email,
+                    onComplete: { fetchResalePosts() }
+                )
             }
         }
     }
@@ -143,7 +179,9 @@ struct ResaleFeedView: View {
 
     func filterValidResalePosts(_ posts: [ResalePostDTO]) -> [ResalePostDTO] {
         posts.filter { post in
-            if let event = allEvents.first(where: { $0.id == post.eventId }) {
+            print("🔎 Filtering \(posts.count) posts")
+            if let event = allEvents.first(where: { Int($0.id) == post.eventId }) {
+                print("🔹 Post: \(post.title), eventId: \(post.eventId)")
                 return (event.dateAsDate ?? .distantPast) > Date()
             }
             return false
@@ -157,15 +195,26 @@ struct ResaleFeedView: View {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data else { return }
-            if let decoded = try? JSONDecoder().decode([ResalePostDTO].self, from: data) {
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            if let http = response as? HTTPURLResponse {
+                print("HTTP STATUS:", http.statusCode)
+            }
+            guard let data = data else {
+                print("No data received from /resale/available")
+                DispatchQueue.main.async { self.isLoading = false }
+                return
+            }
+            print("RAW RESALE JSON:", String(data: data, encoding: .utf8) ?? "nil")
+            do {
+                let decoded = try JSONDecoder().decode([ResalePostDTO].self, from: data)
                 DispatchQueue.main.async {
+                    print("🪪 Decoded \(decoded.count) resale posts")
                     self.posts = filterValidResalePosts(decoded)
                     self.isLoading = false
                 }
-            } else {
-                print("❌ Failed to decode resale posts")
+            } catch {
+                print("❌ Failed to decode resale posts:", error)
+                DispatchQueue.main.async { self.isLoading = false }
             }
         }.resume()
     }
@@ -234,6 +283,11 @@ struct ResaleFeedView: View {
     }
 
     func openChat(for post: ResalePostDTO) {
+        if post.sellerId == userSession.userId {
+            showErrorToast(lang == "es" ? "No puedes chatear contigo mismo." : "You can’t chat with yourself.")
+            return
+        }
+
         guard let token = TokenManager.shared.getAccessToken(),
               let url = URL(string: "https://backendevent-etce.onrender.com/chat/start") else { return }
 
@@ -247,29 +301,55 @@ struct ResaleFeedView: View {
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
             guard let data = data else {
-                print("❌ No data from /chat/start")
+                DispatchQueue.main.async {
+                    showErrorToast(lang == "es" ? "Sin respuesta del servidor." : "No response from server.")
+                }
                 return
             }
 
-            // ✅ Decode chatRoomId from backend response
+            // Try to decode error from backend
+            if let errorDict = try? JSONDecoder().decode([String: String].self, from: data),
+               let errorMsg = errorDict["error"] {
+                DispatchQueue.main.async {
+                    showErrorToast(errorMsg)
+                }
+                return
+            }
+
+            // Decode successful chat creation
             if let decoded = try? JSONDecoder().decode(ChatRoom.self, from: data) {
                 DispatchQueue.main.async {
                     self.selectedChatSummary = ChatRoomSummary(
-                        chatRoomId: decoded.id,                  // ✅ pass chatRoomId
+                        chatRoomId: decoded.id,
                         resalePostId: post.id,
                         title: post.title,
                         sellerName: post.sellerName,
                         unreadMessages: 0,
                         buyerId: userSession.userId,
-                        eventId: Int64(post.eventId),
-                        type: "DIRECT" 
+                        eventId: Int64(post.eventId ?? -1),
+                        type: "DIRECT"
                     )
                 }
             } else {
-                print("❌ Failed to decode ChatRoom")
+                DispatchQueue.main.async {
+                    showErrorToast(lang == "es" ? "No se pudo abrir el chat." : "Couldn't open chat.")
+                }
             }
         }.resume()
     }
+    
+    
+    
+    private func showErrorToast(_ text: String) {
+        toastText = text
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.error)   // 🔔 vibration
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { showToast = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { showToast = false }
+        }
+    }
+
 
     func startUnreadTimer() {
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in

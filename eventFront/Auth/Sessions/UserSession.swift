@@ -7,6 +7,10 @@
 
 import Foundation
 
+extension Notification.Name {
+    static let userSessionLoaded = Notification.Name("userSessionLoaded")
+}
+
 class UserSession: ObservableObject {
     @Published var fullName = "User"
     @Published var firstName = "User"
@@ -45,8 +49,11 @@ class UserSession: ObservableObject {
                 self.userId = json["id"] as? Int ?? 0
                 self.role = (json["role"] as? String ?? "USER").uppercased()
                 if let eventIds = json["promotedEvents"] as? [Int] {
-                                self.promotedEvents = eventIds
-                            }            }
+                    self.promotedEvents = eventIds
+                }
+                
+                NotificationCenter.default.post(name: .userSessionLoaded, object: self.username)
+            }
         }.resume()
     }
 }

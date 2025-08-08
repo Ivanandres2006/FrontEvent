@@ -21,6 +21,8 @@
 		D01BF3D82E0A279E0099F474 /* StripePaymentsUI in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3D72E0A279E0099F474 /* StripePaymentsUI */; };
 		D01BF3DB2E0A27B50099F474 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3DA2E0A27B50099F474 /* GoogleSignIn */; };
 		D01BF3DD2E0A27B50099F474 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = D01BF3DC2E0A27B50099F474 /* GoogleSignInSwift */; };
+		D0753BD42E41B9DA00A47788 /* GooglePlaces in Frameworks */ = {isa = PBXBuildFile; productRef = D0753BD32E41B9DA00A47788 /* GooglePlaces */; };
+		D0753BD62E41B9DA00A47788 /* GooglePlacesSwift in Frameworks */ = {isa = PBXBuildFile; productRef = D0753BD52E41B9DA00A47788 /* GooglePlacesSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,6 +87,8 @@
 				D001720E2E3973BA0075C795 /* FirebaseInAppMessaging-Beta in Frameworks */,
 				D01BF3D02E0A279E0099F474 /* StripeFinancialConnections in Frameworks */,
 				D00172102E3973BA0075C795 /* FirebaseMessaging in Frameworks */,
+				D0753BD62E41B9DA00A47788 /* GooglePlacesSwift in Frameworks */,
+				D0753BD42E41B9DA00A47788 /* GooglePlaces in Frameworks */,
 				D01BF3CC2E0A279E0099F474 /* StripeCardScan in Frameworks */,
 				D01BF3C82E0A279E0099F474 /* Stripe in Frameworks */,
 				D01BF3D22E0A279E0099F474 /* StripeIdentity in Frameworks */,
@@ -178,6 +182,8 @@
 				D001720B2E3973BA0075C795 /* FirebaseCore */,
 				D001720D2E3973BA0075C795 /* FirebaseInAppMessaging-Beta */,
 				D001720F2E3973BA0075C795 /* FirebaseMessaging */,
+				D0753BD32E41B9DA00A47788 /* GooglePlaces */,
+				D0753BD52E41B9DA00A47788 /* GooglePlacesSwift */,
 			);
 			productName = eventFront;
 			productReference = D03C7B532DFA800700AA9615 /* eventFront.app */;
@@ -265,6 +271,7 @@
 				D01BF3C62E0A279E0099F474 /* XCRemoteSwiftPackageReference "stripe-ios" */,
 				D01BF3D92E0A27B50099F474 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 				D001720A2E3973B90075C795 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				D0753BD22E41B9DA00A47788 /* XCRemoteSwiftPackageReference "ios-places-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D03C7B542DFA800700AA9615 /* Products */;
@@ -463,7 +470,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = eventFront/eventFront.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 3RF8DYAD9L;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -486,7 +493,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.imadriz.newAppIma.eventFront;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -506,7 +513,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = eventFront/eventFront.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 11;
 				DEVELOPMENT_TEAM = 3RF8DYAD9L;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
@@ -529,7 +536,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.5;
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.imadriz.newAppIma.eventFront;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -698,6 +705,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		D0753BD22E41B9DA00A47788 /* XCRemoteSwiftPackageReference "ios-places-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googlemaps/ios-places-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 10.1.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -770,6 +785,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D01BF3D92E0A27B50099F474 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		D0753BD32E41B9DA00A47788 /* GooglePlaces */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0753BD22E41B9DA00A47788 /* XCRemoteSwiftPackageReference "ios-places-sdk" */;
+			productName = GooglePlaces;
+		};
+		D0753BD52E41B9DA00A47788 /* GooglePlacesSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D0753BD22E41B9DA00A47788 /* XCRemoteSwiftPackageReference "ios-places-sdk" */;
+			productName = GooglePlacesSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

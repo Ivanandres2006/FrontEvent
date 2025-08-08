@@ -5,6 +5,7 @@ import StripePaymentSheet
 struct RegisterTicketView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
     @State var event: Event
+    @EnvironmentObject var userSession: UserSession
     let userEmail: String
     var onComplete: ([TicketDTO]) -> Void
 
@@ -23,6 +24,20 @@ struct RegisterTicketView: View {
     @State private var showPaymentPopup = false
     @State private var selectedPaymentMethod: String = "card" // or "zelle"
     @State private var isZelleAvailable: Bool = false
+    
+    @State private var showWaitlistPopup = false
+    @State private var waitlistStatus: String? = nil // "pending", "approved", "denied"
+    @State private var waitlistLoading = false
+
+    @State private var showWaitlistStatusSheet = false
+    @State private var waitlistSheetType: String? = nil // "pending" or "denied"
+    @State private var autoDismissWorkItem: DispatchWorkItem?
+
+    @State private var waitlistDragOffset: CGFloat = 0
+    @State private var waitlistShouldHide: Bool = false
+    
+    @State private var isRefreshingEvent = false
+
 
 
     var selectedTier: TicketTier? {
@@ -61,26 +76,7 @@ struct RegisterTicketView: View {
                     }
                     
                     if sortedTiers.isEmpty || !hasAvailableTier {
-                        VStack(spacing: 32) {
-                            Spacer(minLength: 100)
-                            
-                            VStack(spacing: 12) {
-                                Image(systemName: "nosign")
-                                    .font(.system(size: 48))
-                                    .foregroundColor(.red)
-                                
-                                Text(lang == "es"
-                                     ? "Este evento no tiene entradas disponibles"
-                                     : "This event has no available tickets")
-                                .font(.title2.bold())
-                                .multilineTextAlignment(.center)
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                            }
-                            
-                            Spacer()
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        NoTicketsView(lang: lang)
                     } else {
                         // 🔹 Ticket Tier Selector
                         VStack(alignment: .leading, spacing: 14) {
@@ -151,13 +147,16 @@ struct RegisterTicketView: View {
                                 )
                                 .opacity(isUnavailable ? 0.4 : 1.0)
                                 .onTapGesture {
-                                    if !isUnavailable {
+                                    let isListOnly = event.listOnly ?? false
+                                    if !isUnavailable && isListOnly && waitlistStatus == "pending" {
+                                        showWaitlistSheet(type: "pending")
+                                    } else if !isUnavailable && isListOnly && waitlistStatus == "denied" {
+                                        showWaitlistSheet(type: "denied")
+                                    } else if !isUnavailable && (!isListOnly || waitlistStatus == "approved") {
                                         selectedTierId = tier.id
                                     }
                                 }
-                                .onAppear {
-                                    isZelleAvailable = !(event.zelleEmail?.isEmpty ?? true) || !(event.zellePhone?.isEmpty ?? true)
-                                }
+
                             }
                         }
                         
@@ -185,9 +184,11 @@ struct RegisterTicketView: View {
                             }
                         }
                         
-                        let hasNonCardPayments = isZelleAvailable ||
-                        (event.country.lowercased() == "venezuela" &&
-                         ((event.allowPagoMovil ?? false) || (event.allowCash ?? false)))
+                        let hasNonCardPayments: Bool = {
+                            let venezuela = event.country.lowercased() == "venezuela"
+                            let altPayments = (event.allowPagoMovil ?? false) || (event.allowCash ?? false)
+                            return isZelleAvailable || (venezuela && altPayments)
+                        }()
                         
                         // 🔹 Pay Now Button
                         Button {
@@ -304,8 +305,92 @@ struct RegisterTicketView: View {
                 .transition(.scale)
                 .zIndex(10)
             }
+            
+            if showWaitlistPopup {
+                ZStack {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture { showWaitlistPopup = false }
+
+                    VStack(spacing: 16) {
+                        Text("📝 " + (lang == "es" ? "Este evento es con lista" : "This event uses a list"))
+                            .font(.title3.bold())
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.white)
+
+                        Text(lang == "es"
+                             ? "Debes solicitar acceso antes de poder registrarte. Notificaremos al organizador."
+                             : "You must request access before registering. We’ll notify the organizer.")
+                            .font(.subheadline)
+                            .multilineTextAlignment(.center)
+                            .foregroundColor(.white.opacity(0.7))
+
+                        if waitlistStatus == nil {
+                            Button {
+                                sendWaitlistRequest()
+                            } label: {
+                                if waitlistLoading {
+                                    ProgressView().tint(.white)
+                                } else {
+                                    Text(lang == "es" ? "Solicitar Acceso" : "Request Access")
+                                        .bold()
+                                        .padding()
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.gold)
+                                        .foregroundColor(.black)
+                                        .cornerRadius(14)
+                                }
+                            }
+                        } else {
+                            let msg = waitlistStatus == "pending"
+                                ? (lang == "es" ? "⏳ Solicitud Enviada" : "⏳ Request Sent")
+                                : waitlistStatus == "denied"
+                                    ? (lang == "es" ? "❌ Acceso Denegado" : "❌ Access Denied")
+                                    : (lang == "es" ? "✅ Acceso Aprobado" : "✅ Access Approved")
+
+                            Text(msg)
+                                .font(.headline)
+                                .foregroundColor(.white)
+                        }
+
+                        Button(lang == "es" ? "Cerrar" : "Close") {
+                            showWaitlistPopup = false
+                        }
+                        .foregroundColor(.white.opacity(0.6))
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(20)
+                    .padding(.horizontal, 24)
+                }
+                .transition(.scale)
+                .zIndex(20)
+            }
+            
+            if showWaitlistStatusSheet {
+                miniWaitlistSheet()
+            }
+            
+            if isRefreshingEvent {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                ProgressView(lang == "es" ? "Actualizando..." : "Updating...")
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+            }
         }
+        
         .animation(.easeInOut, value: showPaymentPopup)
+        .animation(.spring(response: 0.7, dampingFraction: 0.82, blendDuration: 0.21), value: showWaitlistStatusSheet)
+        .onAppear {
+            isZelleAvailable = !(event.zelleEmail?.isEmpty ?? true) || !(event.zellePhone?.isEmpty ?? true)
+            
+            if event.listOnly ?? false {
+                checkWaitlistStatus()
+            }
+            
+            fetchUpdatedEventData()
+        }
     }
 
     @ViewBuilder
@@ -324,6 +409,112 @@ struct RegisterTicketView: View {
             .cornerRadius(14)
         }
     }
+    
+    @ViewBuilder
+    private func miniWaitlistSheet() -> some View {
+        let isPending = waitlistSheetType == "pending"
+        let isDenied = waitlistSheetType == "denied"
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 16) {
+                // Animated Emoji
+                if isPending {
+                    Text("⏳")
+                        .font(.system(size: 46))
+                        .scaleEffect(showWaitlistStatusSheet ? 1.1 : 1)
+                        .animation(.spring(), value: showWaitlistStatusSheet)
+                }
+                if isDenied {
+                    Text("❌")
+                        .font(.system(size: 46))
+                        .scaleEffect(showWaitlistStatusSheet ? 1.1 : 1)
+                        .animation(.spring(), value: showWaitlistStatusSheet)
+                }
+                // Main Title
+                Text(isPending ?
+                     (lang == "es" ? "Solicitud Enviada" : "Request Sent") :
+                     (lang == "es" ? "Acceso Denegado" : "Access Denied")
+                )
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(isDenied ? .red : .white)
+                    .padding(.bottom, -4)
+
+                // Subtitle
+                Text(isPending ?
+                    (lang == "es"
+                        ? "Ya solicitaste acceso. Espera la aprobación del organizador."
+                        : "You've already requested access. Please wait for approval.") :
+                    (lang == "es"
+                        ? "El organizador ha denegado tu acceso a este evento."
+                        : "The organizer denied your access to this event.")
+                )
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 10)
+
+                // Button to dismiss
+                Button(action: {
+                    dismissWaitlistSheet()
+                }) {
+                    Text(lang == "es" ? "Cerrar" : "Close")
+                        .fontWeight(.semibold)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(isDenied ? Color.red : Color.gold)
+                        )
+                        .foregroundColor(.black)
+                }
+                .padding(.top, 6)
+            }
+            .padding(.vertical, 30)
+            .padding(.horizontal, 28)
+            .background(
+                BlurView(style: .systemUltraThinMaterialDark)
+                    .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: 16, x: 0, y: 10)
+            )
+            .frame(maxWidth: 380)
+            .padding(.bottom, 24)
+            .offset(y: waitlistShouldHide ? 600 : waitlistDragOffset) // <--- Key for animating out
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        if value.translation.height > 0 {
+                            waitlistDragOffset = value.translation.height
+                        }
+                    }
+                    .onEnded { value in
+                        if value.translation.height > 100 {
+                            dismissWaitlistSheet()
+                        } else {
+                            withAnimation(.spring()) {
+                                waitlistDragOffset = 0
+                            }
+                        }
+                    }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(.spring(response: 0.7, dampingFraction: 0.82, blendDuration: 0.25), value: waitlistShouldHide)
+        }
+        .ignoresSafeArea()
+    }
+
+    private func dismissWaitlistSheet() {
+        // First animate sheet down
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.82, blendDuration: 0.25)) {
+            waitlistShouldHide = true
+        }
+        // After animation, hide the whole sheet
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            waitlistShouldHide = false
+            showWaitlistStatusSheet = false
+            waitlistDragOffset = 0
+        }
+    }
+    
 
     @ViewBuilder
     private func paymentDetailsView() -> some View {
@@ -388,6 +579,65 @@ struct RegisterTicketView: View {
             EmptyView()
         }
     }
+    
+    private func showWaitlistSheet(type: String) {
+        waitlistSheetType = type
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.80, blendDuration: 0.32)) {
+            showWaitlistStatusSheet = true
+        }
+        // Vibration every time
+        if type == "pending" {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        } else if type == "denied" {
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+        }
+        // Cancel previous auto-dismiss, if any
+        autoDismissWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            dismissWaitlistSheet()
+        }
+        autoDismissWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: workItem)
+    }
+
+    
+    func checkWaitlistStatus() {
+        guard event.listOnly ?? false else { return }
+        guard let token = TokenManager.shared.getAccessToken() else {
+            print("❌ No token found in TokenManager!")
+            return
+        }
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)/waitlist/status")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        URLSession.shared.dataTask(with: request) { data, _, _ in
+            guard let data = data else { return }
+
+            // Check for empty/null response (no entry for this user)
+            if let raw = String(data: data, encoding: .utf8), raw == "null" || raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                DispatchQueue.main.async {
+                    self.showWaitlistPopup = true // Let them request access
+                }
+                return
+            }
+
+            do {
+                let entry = try JSONDecoder().decode(WaitlistEntry.self, from: data)
+                DispatchQueue.main.async {
+                    self.waitlistStatus = entry.status.lowercased()
+                    // If approved, allow selecting a ticket; if pending/denied, show appropriate UI
+                }
+            } catch {
+                print("❌ Failed to decode waitlist entry: \(error)")
+                print("✅ RAW waitlist status data:", String(data: data, encoding: .utf8) ?? "nil")
+                DispatchQueue.main.async {
+                    self.showWaitlistPopup = true
+                }
+            }
+        }.resume()
+    }
+
 
     private func startCheckout() {
         paymentSheet = nil
@@ -438,6 +688,7 @@ struct RegisterTicketView: View {
                     }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         self.fetchTickets()
+                        self.fetchUpdatedEventData() // 👈 reload event data after free ticket
                     }
                 }
                 return
@@ -450,6 +701,7 @@ struct RegisterTicketView: View {
                         ? "✅ Hemos notificado al organizador. Espera confirmación."
                         : "✅ We've notified the organizer. Wait for confirmation."
                     self.fetchTickets()
+                    self.fetchUpdatedEventData() // 👈 always reload event data after manual payment
                 }
                 return
             }
@@ -475,20 +727,43 @@ struct RegisterTicketView: View {
     
     private func fetchUpdatedEventData() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
+        isRefreshingEvent = true
         let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)")!
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            if let data = data,
-               let updatedEvent = try? JSONDecoder().decode(Event.self, from: data) {
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                isRefreshingEvent = false
+                if let data = data,
+                   let updatedEvent = try? JSONDecoder().decode(Event.self, from: data) {
                     self.event = updatedEvent
                 }
             }
         }.resume()
     }
 
+
+    func sendWaitlistRequest() {
+        guard let token = TokenManager.shared.getAccessToken() else { return }
+        waitlistLoading = true
+
+        var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)/waitlist/request")!)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        let fullName = userSession.fullName.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "AnonymousUser"
+        let body = "fullName=\(fullName)"
+        request.httpBody = body.data(using: String.Encoding.utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            DispatchQueue.main.async {
+                waitlistLoading = false
+                waitlistStatus = "pending"
+            }
+        }.resume()
+    }
 
 
     private func presentPaymentSheet(paymentIntentId: String) {
@@ -543,11 +818,12 @@ struct RegisterTicketView: View {
         }
     }
 
-    private func topViewController(controller: UIViewController? = UIApplication.shared
-        .connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .flatMap { $0.windows }
-        .first(where: { $0.isKeyWindow })?.rootViewController) -> UIViewController? {
+    private func topViewController(controller: UIViewController? = nil) -> UIViewController? {
+        let controller = controller ?? UIApplication.shared
+            .connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first(where: { $0.isKeyWindow })?.rootViewController
 
         if let nav = controller as? UINavigationController {
             return topViewController(controller: nav.visibleViewController)
@@ -560,6 +836,7 @@ struct RegisterTicketView: View {
         }
         return controller
     }
+
 
     private func confirmBackend(paymentIntentId: String) {
         guard let token = TokenManager.shared.getAccessToken() else {
@@ -618,3 +895,37 @@ struct RegisterTicketView: View {
         return formatter.string(from: date)
     }
 }
+
+
+struct BlurView: UIViewRepresentable {
+    var style: UIBlurEffect.Style
+    func makeUIView(context: Context) -> UIVisualEffectView {
+        return UIVisualEffectView(effect: UIBlurEffect(style: style))
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {}
+}
+
+
+private struct NoTicketsView: View {
+    let lang: String
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer(minLength: 100)
+            VStack(spacing: 12) {
+                Image(systemName: "nosign")
+                    .font(.system(size: 48))
+                    .foregroundColor(.red)
+                Text(lang == "es"
+                     ? "Este evento no tiene entradas disponibles"
+                     : "This event has no available tickets")
+                .font(.title2.bold())
+                .multilineTextAlignment(.center)
+                .foregroundColor(.white)
+                .padding(.horizontal)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+

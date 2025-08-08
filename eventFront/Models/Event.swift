@@ -27,6 +27,9 @@ struct Event: Identifiable, Codable {
     let pagoMovilCi: String?
     let pagoMovilBank: String?
     let cashNote: String?
+    var listOnly: Bool? = false
+    var guestListPdf: String?
+    let waitlistEntries: [WaitlistEntry]? // ✅ Add this
     let reunionGuests: [ReunionGuest]?
     let createdBy: UserMini? // 👈 NEW
     var purchasedTickets: [TicketDTO] = []  // ✅ Local-only, not decoded from backend
@@ -43,7 +46,7 @@ struct Event: Identifiable, Codable {
         case id, title, description, location, address, state, country,
              latitude, longitude, dateTime, imageUrl, createdByEmail,
              attendees, ticketTiers, type,
-             budgetGoal, budgetPurpose, zelleEmail, zellePhone, allowPagoMovil, pagoMovilCi, pagoMovilBank, cashNote, pagoMovilPhone, allowCash, reunionGuests,createdBy
+             budgetGoal, budgetPurpose, zelleEmail, zellePhone, allowPagoMovil, pagoMovilCi, pagoMovilBank, cashNote,listOnly, waitlistEntries, guestListPdf,pagoMovilPhone, allowCash, reunionGuests,createdBy
         // purchasedTickets is intentionally excluded
     }
 
@@ -70,10 +73,13 @@ struct Event: Identifiable, Codable {
         zellePhone = try container.decodeIfPresent(String.self, forKey: .zellePhone)
         allowPagoMovil = try container.decodeIfPresent(Bool.self, forKey: .allowPagoMovil)
         allowCash = try container.decodeIfPresent(Bool.self, forKey: .allowCash)
+        waitlistEntries = try container.decodeIfPresent([WaitlistEntry].self, forKey: .waitlistEntries)
+        listOnly = try container.decodeIfPresent(Bool.self, forKey: .listOnly)
         pagoMovilPhone = try container.decodeIfPresent(String.self, forKey: .pagoMovilPhone)
         pagoMovilCi = try container.decodeIfPresent(String.self, forKey: .pagoMovilCi)
         pagoMovilBank = try container.decodeIfPresent(String.self, forKey: .pagoMovilBank)
         cashNote = try container.decodeIfPresent(String.self, forKey: .cashNote)
+        guestListPdf = try container.decodeIfPresent(String.self, forKey: .guestListPdf)
 
         reunionGuests = try container.decodeIfPresent([ReunionGuest].self, forKey: .reunionGuests)
         createdBy = try container.decodeIfPresent(UserMini.self, forKey: .createdBy) // 👈 NEW
@@ -105,7 +111,10 @@ struct Event: Identifiable, Codable {
         try container.encodeIfPresent(pagoMovilPhone, forKey: .pagoMovilPhone)
         try container.encodeIfPresent(pagoMovilCi, forKey: .pagoMovilCi)
         try container.encodeIfPresent(pagoMovilBank, forKey: .pagoMovilBank)
+        try container.encodeIfPresent(waitlistEntries, forKey: .waitlistEntries)
+        try container.encodeIfPresent(listOnly, forKey: .listOnly)
         try container.encodeIfPresent(cashNote, forKey: .cashNote)
+        try container.encodeIfPresent(guestListPdf, forKey: .guestListPdf)
         try container.encodeIfPresent(reunionGuests, forKey: .reunionGuests)
         try container.encodeIfPresent(createdBy, forKey: .createdBy) // 👈 NEW
         try container.encode(ticketTiers, forKey: .ticketTiers)
@@ -135,6 +144,9 @@ struct Event: Identifiable, Codable {
         self.allowPagoMovil = false
         self.allowCash = false
         self.pagoMovilCi = nil
+        self.listOnly = false
+        self.waitlistEntries = nil
+        self.guestListPdf = nil
         self.pagoMovilPhone = nil
         self.pagoMovilBank = nil
         self.cashNote = ""
@@ -150,6 +162,7 @@ struct UserMini: Codable {
     let email: String
     let username: String
 }
+
 
 
 

@@ -115,26 +115,42 @@ struct BuyNowView: View {
     private func fetchEventDetails() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
-        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(resalePost.eventId)")!
+        guard let eventId = resalePost.eventId else {
+            DispatchQueue.main.async {
+                self.errorMessage = "Event not found"
+                self.showError = true
+            }
+            return
+        }
+        let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)")!
+        print("🔎 Fetching event with id:", resalePost.eventId)  // <-- Add this
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            if let data = data,
-               let fetchedEvent = try? JSONDecoder().decode(Event.self, from: data) {
-                DispatchQueue.main.async {
-                    self.event = fetchedEvent
-                    self.isEventLoaded = true
+            if let data = data {
+                print("📦 Raw event data:", String(data: data, encoding: .utf8) ?? "nil")
+                if let fetchedEvent = try? JSONDecoder().decode(Event.self, from: data) {
+                    DispatchQueue.main.async {
+                        self.event = fetchedEvent
+                        self.isEventLoaded = true
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Event not found"
+                        self.showError = true
+                    }
                 }
             } else {
                 DispatchQueue.main.async {
-                    self.errorMessage = "Event not found"
+                    self.errorMessage = "No data received"
                     self.showError = true
                 }
             }
         }.resume()
     }
+
 
     private func startCheckout() {
         isLoading = true
@@ -163,6 +179,10 @@ struct BuyNowView: View {
                 return
             }
 
+            // 🟡 Print the raw response for debugging
+            print("🟡 Raw pay API response:", String(data: data, encoding: .utf8) ?? "nil")
+
+            // Try to decode expected PaymentIntentResponse
             if let result = try? JSONDecoder().decode(PaymentIntentResponse.self, from: data) {
                 var config = PaymentSheet.Configuration()
                 config.merchantDisplayName = "WKND Events"
@@ -173,7 +193,17 @@ struct BuyNowView: View {
                     self.paymentSheet = PaymentSheet(paymentIntentClientSecret: result.clientSecret, configuration: config)
                     self.presentPaymentSheet()
                 }
-            } else {
+            }
+            // Try to decode error message from backend, e.g. {"error": "Ticket already sold"}
+            else if let errorJson = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                    let errorMsg = errorJson["error"] as? String {
+                DispatchQueue.main.async {
+                    self.errorMessage = errorMsg
+                    self.showError = true
+                }
+            }
+            // Fallback if decoding fails
+            else {
                 DispatchQueue.main.async {
                     self.errorMessage = "Unexpected server response"
                     self.showError = true
@@ -181,6 +211,7 @@ struct BuyNowView: View {
             }
         }.resume()
     }
+
 
     private func presentPaymentSheet() {
         guard let sheet = paymentSheet else {

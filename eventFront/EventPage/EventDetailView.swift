@@ -1,9 +1,18 @@
+//
+//  EventDetailView.swift
+//  WKND
+//
+//  Promoter-safe version
+//  - Uses /api/promoters/me + /api/promoters/event/{id}/dashboard (stable DTOs)
+//  - Defensive JSON checks (prevents “Unexpected end of file” crashes)
+//  - Share URL uses wkndevent.com
+//
+
 import SwiftUI
 import MapKit
 import UIKit
 import Charts
 import PassKit
-
 
 struct EventDetailView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
@@ -23,6 +32,12 @@ struct EventDetailView: View {
     @State private var showAnalyticsView = false
     @State private var showScannerView = false
     
+    // ADD near your other @State vars:
+    @State private var directChatDTO: ChatRoomSummaryDTO? = nil
+
+    // Safer conversion; avoids Optional<Int> issues
+    private var currentUserId: Int { Int(userSession.userId) ?? 0 }
+    
     @State private var shareURL: URL? = nil
     @State private var isFetchingShareLink = false
     
@@ -40,7 +55,10 @@ struct EventDetailView: View {
     
     @State private var selectedTab: String = "overview" // "overview" or "dashboard"
     
-    
+    @State private var goingUsers: [Attendee] = []
+    @State private var isLoadingGoing = false
+    @State private var showGoingList = false
+
     var coordinate: CLLocationCoordinate2D? {
         if let lat = event.latitude, let lng = event.longitude {
             return CLLocationCoordinate2D(latitude: lat, longitude: lng)
@@ -101,7 +119,53 @@ struct EventDetailView: View {
                             eventInfoSection
                             registerButtons
                             
-                            if event.createdByEmail == userSession.email && event.type != "reunion" {
+                            // "Going" strip
+                            if isLoadingGoing {
+                                HStack(spacing: 8) {
+                                    ProgressView().tint(.gold)
+                                    Text(lang == "es" ? "Cargando asistentes..." : "Loading attendees...")
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .font(.footnote)
+                                    Spacer()
+                                }
+                                .padding(.horizontal)
+                            } else if !goingUsers.isEmpty {
+                                Button {
+                                    showGoingList = true
+                                } label: {
+                                    HStack(alignment: .center, spacing: 12) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(lang == "es" ? "Asistirán" : "Going")
+                                                .font(.subheadline.bold())
+                                                .foregroundColor(.white)
+
+                                            Text(goingSubtitleText())
+                                                .foregroundColor(.white.opacity(0.7))
+                                                .font(.caption)
+                                                .lineLimit(1)
+                                        }
+
+                                        Spacer(minLength: 8)
+
+                                        OverlappingAvatarStack(attendees: goingUsers, maxCount: 6, size: 30)
+
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(.white.opacity(0.45))
+                                    }
+                                    .padding(12)
+                                    .background(Color.white.opacity(0.05))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14)
+                                            .stroke(Color.white.opacity(0.06), lineWidth: 1)
+                                    )
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .padding(.horizontal)
+                            }
+
+                            if isOwnerOrAdmin && event.type != "reunion" {
                                 Button(action: {
                                     showPromoterDashboard = true
                                 }) {
@@ -132,7 +196,7 @@ struct EventDetailView: View {
                         ReunionDashboardView(
                             budgetGoal: event.budgetGoal ?? 0,
                             attendees: event.reunionGuests ?? [],
-                            isOwner: event.createdByEmail == userSession.email,
+                            isOwner: isOwnerOrAdmin,
                             eventId: event.id
                         )
                         .padding(.top)
@@ -144,7 +208,7 @@ struct EventDetailView: View {
             }
         }
         .background(
-            LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
+            LinearGradient(colors: [Color.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea()
         )
         .onAppear {
             DispatchQueue.main.async {
@@ -155,18 +219,29 @@ struct EventDetailView: View {
             }
             fetchTickets()
             checkIfPromoter()
+            fetchGoing()
         }
-        .fullScreenCover(item: $directChatSummary) { summary in
-            ChatView(chatSummary: summary, currentUserId: userSession.userId)
+        // …WITH this
+        .fullScreenCover(item: $directChatDTO) { room in
+            NavigationStack {
+                ChatRoomView(room: room, myUserId: currentUserId)
+            }
         }
         .fullScreenCover(isPresented: $showPromoterDashboard) {
             EventPromoterDashboardView(event: event)
         }
         .fullScreenCover(isPresented: $showPromoterStats) {
-            PromoterAnalyticsView(eventId: event.id)
+            PromoterSelfView(eventId: event.id)
         }
         .sheet(isPresented: $showScannerView) {
             TicketValidationViewForScanner(eventId: event.id)
+        }
+        .sheet(isPresented: $showGoingList) {
+            GoingListView(
+                eventId: event.id,
+                lang: lang,
+                initial: goingUsers
+            )
         }
         .sheet(isPresented: $showAnalyticsView) {
             EventAnalyticsView(eventId: event.id)
@@ -175,7 +250,10 @@ struct EventDetailView: View {
             if let url = shareURL {
                 ActivityViewController(activityItems: [url])
             } else {
-                ProgressView(lang == "es" ? "Preparando link...": "Preparing link...").padding().background(Color.black).cornerRadius(12)
+                ProgressView(lang == "es" ? "Preparando link..." : "Preparing link...")
+                    .padding()
+                    .background(Color.black)
+                    .cornerRadius(12)
             }
         }
         .sheet(isPresented: $showRegisterSheet) {
@@ -192,7 +270,6 @@ struct EventDetailView: View {
         .sheet(isPresented: $showEditView) {
             EditEventView(event: event, onSave: { updated in
                 self.event = updated
-                
                 if let index = allEvents.firstIndex(where: { $0.id == updated.id }) {
                     allEvents[index] = updated
                 } else {
@@ -205,49 +282,14 @@ struct EventDetailView: View {
     }
     
     private var eventImageSection: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20)
-                .fill(LinearGradient(colors: [.purple.opacity(0.4), .pink.opacity(0.3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .blur(radius: 40)
-                .frame(height: 260)
-                .padding(.horizontal)
-            
-            if let imageUrl = event.imageUrl,
-               !imageUrl.isEmpty,
-               let url = URL(string: imageUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        ZStack {
-                            Color.black.opacity(0.2)
-                            ProgressView().tint(.white)
-                        }
-                    case .success(let image):
-                        image.resizable().scaledToFill()
-                    case .failure:
-                        Image("defaultEvent").resizable().scaledToFill()
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-                .frame(height: 240)
-                .frame(maxWidth: .infinity)
-                .cornerRadius(20)
-                .clipped()
-                .padding(.horizontal)
-                .shadow(color: .purple.opacity(0.4), radius: 10, x: 0, y: 6)
-            } else {
-                Image("defaultEvent")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(height: 240)
-                    .frame(maxWidth: .infinity)
-                    .cornerRadius(20)
-                    .clipped()
-                    .padding(.horizontal)
-                    .shadow(color: .purple.opacity(0.4), radius: 10, x: 0, y: 6)
-            }
-        }
+        RemoteImageBox(
+            urlString: event.imageUrl,
+            fallbackImageName: "defaultEvent",
+            aspectRatio: 16.0/9.0,
+            fill: true,
+            cornerRadius: 20
+        )
+        .padding(.horizontal)
     }
     
     private var eventInfoSection: some View {
@@ -259,7 +301,7 @@ struct EventDetailView: View {
                 
                 Spacer()
                 
-                if event.createdByEmail == userSession.email {
+                if isOwnerOrAdmin {
                     HStack(spacing: 12) {
                         if event.type != "reunion" {
                             Button(action: {
@@ -294,17 +336,23 @@ struct EventDetailView: View {
                         }
                     }
                 } else if isPromoterForEvent && event.type != "reunion" {
-                    Button(action: {
-                        showPromoterStats = true
-                    }) {
-                        Image(systemName: "chart.bar.xaxis")
-                            .foregroundColor(.green)
-                            .padding(8)
-                            .background(Color.white.opacity(0.1))
-                            .clipShape(Circle())
+                    HStack(spacing: 12) {
+                        Button(action: { showPromoterStats = true }) {
+                            Image(systemName: "chart.bar.xaxis")
+                                .foregroundColor(.green)
+                                .padding(8)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        Button(action: { showScannerView = true }) {
+                            Image(systemName: "qrcode.viewfinder")
+                                .foregroundColor(.yellow)
+                                .padding(8)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Circle())
+                        }
                     }
                 }
-                
             }
             
             Text(formattedDate(event.dateTime))
@@ -322,6 +370,10 @@ struct EventDetailView: View {
         .padding(.horizontal)
     }
     
+    private var isOwnerOrAdmin: Bool {
+        userSession.role == "ADMIN" || event.createdByEmail == userSession.email
+    }
+    
     private var registerButtons: some View {
         HStack(spacing: 16) {
             Button(action: { showRegisterSheet = true }) {
@@ -337,7 +389,7 @@ struct EventDetailView: View {
             }
             
             Button(action: {
-                startDirectChat()
+                Task { await startDirectChat() }
             }) {
                 VStack {
                     Image(systemName: "envelope")
@@ -349,7 +401,6 @@ struct EventDetailView: View {
                 .background(Color.white.opacity(0.08))
                 .cornerRadius(16)
             }
-            
             
             Button(action: openShareSheet) {
                 VStack {
@@ -411,25 +462,19 @@ struct EventDetailView: View {
                             .foregroundColor(.white)
                             .padding(.horizontal)
                         
-                        
-                            TabView {
-                                ForEach(eventTickets, id: \.id) { ticket in
-                                    TicketCardView(ticket: ticket, event: event, lang: lang)
-                                }
+                        TabView {
+                            ForEach(eventTickets, id: \.id) { ticket in
+                                TicketCardView(ticket: ticket, event: event, lang: lang)
                             }
-                            .frame(height: 410)
-                            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
-                        
+                        }
+                        .frame(height: 410)
+                        .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
                     }
                     .padding(.top)
                 }
             }
         }
     }
-
-
-    
-    
 
     private var errorSection: some View {
         Group {
@@ -442,102 +487,224 @@ struct EventDetailView: View {
         }
     }
     
-    
-    
-    func startDirectChat() {
+    // Build the "Followed by Ana, Mike and more" line without heavy inline logic
+    private func goingSubtitleText() -> String {
+        let names = goingUsers.compactMap { $0.username }.filter { !$0.isEmpty }
+        if names.isEmpty {
+            return "\(goingUsers.count) " + (lang == "es" ? "personas" : "people")
+        }
+        let shown = Array(names.prefix(2))
+        let head = shown.joined(separator: ", ")
+        let suffix = names.count > 2 ? (lang == "es" ? " y más" : " and more") : ""
+        return (lang == "es" ? "Seguido por " : "Followed by ") + head + suffix
+    }
+
+    private func fetchGoing() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
+        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/attendance/events/\(event.id)/going") else { return }
 
-        let url = URL(string: "https://backendevent-etce.onrender.com/chat/start-direct")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["eventId": event.id]
-        request.httpBody = try? JSONEncoder().encode(body)
+        isLoadingGoing = true
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data else { return }
-
-            do {
-                if let str = String(data: data, encoding: .utf8) {
-                    print("🧾 Chat Room response: \(str)")
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            DispatchQueue.main.async {
+                self.isLoadingGoing = false
+                guard let data = data else { return }
+                if let decoded = try? JSONDecoder().decode([Attendee].self, from: data) {
+                    self.goingUsers = decoded
+                } else {
+                    self.goingUsers = []
                 }
-                let decoded = try JSONDecoder().decode(ChatRoomDTO.self, from: data)
-                DispatchQueue.main.async {
-                    self.directChatSummary = ChatRoomSummary(
-                        chatRoomId: decoded.id,                        resalePostId: nil,
-                        title: "Chat with Organizer",
-                        sellerName: event.createdByEmail ?? "Organizer", // or just "Organizer"
-                        unreadMessages: 0,
-                        buyerId: nil,
-                        eventId: Int64(event.id),
-                        type: "DIRECT" 
-                    )
-                    self.showChatView = true
-                }
-            } catch {
-                print("❌ Failed to decode ChatRoomDTO:", error)
             }
         }.resume()
     }
-
-
     
+    /// Tries to get the organizer's userId for this event.
+    /// Uses event.createdByEmail -> /api/users/by-email/{email} (or common fallbacks).
+    private func resolveOrganizerUserId() async -> Int? {
+        // If your Event later adds a direct userId field, you can early-return it here.
+
+        // Use createdByEmail (present in your model)
+        guard let rawEmail = event.createdByEmail,
+              let email = rawEmail.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              !email.isEmpty else { return nil }
+
+
+        // Try common endpoints your backend likely exposes.
+        // These calls compile either way; if the server doesn’t have the path it just returns nil.
+        let candidates: [String] = [
+            "https://backendevent-etce.onrender.com/api/users/by-email/\(email)",
+            "https://backendevent-etce.onrender.com/user/by-email/\(email)"
+        ]
+
+        for urlString in candidates {
+            guard let url = URL(string: urlString) else { continue }
+
+            var req = URLRequest(url: url)
+            req.httpMethod = "GET"
+            if let t = TokenManager.shared.getAccessToken() {
+                req.setValue("Bearer \(t)", forHTTPHeaderField: "Authorization")
+            }
+
+            do {
+                let (data, resp) = try await URLSession.shared.data(for: req)
+                guard let http = resp as? HTTPURLResponse, (200...299).contains(http.statusCode) else { continue }
+
+                // Accept a few shapes: {id:Int,...} or {user:{id:Int}} etc.
+                struct Flat: Decodable { let id: Int? }
+                struct Wrapped: Decodable { let user: Flat?; let data: Flat? }
+
+                if let flat = try? JSONDecoder().decode(Flat.self, from: data), let id = flat.id {
+                    return id
+                }
+                if let w = try? JSONDecoder().decode(Wrapped.self, from: data),
+                   let id = w.user?.id ?? w.data?.id {
+                    return id
+                }
+                // Generic dictionary fallback
+                if let map = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let id = map["id"] as? Int { return id }
+                    if let user = map["user"] as? [String: Any], let id = user["id"] as? Int { return id }
+                    if let data = map["data"] as? [String: Any], let id = data["id"] as? Int { return id }
+                }
+            } catch {
+                // try next candidate
+            }
+        }
+        return nil
+    }
+
+    // In EventDetailView.swift
+
+    // Replace your startDirectChat() with this:
+    private func startDirectChat() async {
+        // Prefer the organizer id on the event; fall back to email lookup if missing
+        let organizerId: Int
+        if let id = event.createdBy?.id {
+            organizerId = id
+        } else if let id = await resolveOrganizerUserId() {
+            organizerId = id
+        } else {
+            await MainActor.run {
+                self.message = (lang == "es" ? "No se pudo encontrar al organizador." : "Couldn’t find the organizer.")
+            }
+            return
+        }
+
+        // Prevent self-DM by id
+        if organizerId == currentUserId {
+            await MainActor.run {
+                self.message = (lang == "es" ? "No puedes chatear contigo mismo." : "You can’t chat with yourself.")
+            }
+            return
+        }
+
+        // Ensure REST calls include the JWT
+        ChatAPI.shared.setTokenProvider { TokenManager.shared.getAccessToken() }
+
+        do {
+            // Create or fetch the DIRECT room for this pair + event
+            let roomId = try await ChatAPI.shared.startDirect(eventId: event.id, otherUserId: organizerId)
+
+            // Optionally resolve room meta after creation
+            let summaries = try? await ChatAPI.shared.myRooms()
+            let resolved = summaries?.first(where: { $0.id == roomId })
+
+            await MainActor.run {
+                self.directChatDTO = resolved ?? ChatRoomSummaryDTO(
+                    id: roomId,
+                    // NOTE: if your enum is lowerCamelCase, change `.DIRECT` to `.direct`
+                    type: .DIRECT,
+                    displayName: event.title,
+                    iconUrl: (event.imageUrl?.isEmpty == false) ? event.imageUrl : nil,
+                    lastMessagePreview: nil,
+                    lastMessageAt: nil,
+                    unreadCount: 0
+                )
+            }
+        } catch {
+            await MainActor.run {
+                self.message = (lang == "es" ? "No se pudo abrir el chat." : "Couldn't open chat.")
+            }
+        }
+    }
+
+    // MARK: Promoter check (stable DTOs, no /my-stats)
     func checkIfPromoter() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
-
-        let url = URL(string: "https://backendevent-etce.onrender.com/api/promoters/my-stats/event/\(event.id)")!
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data else {
-                print("❌ No data received")
+        
+        // 1) /api/promoters/me
+        var meReq = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/api/promoters/me")!)
+        meReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: meReq) { meData, meResp, _ in
+            guard let http = meResp as? HTTPURLResponse, http.statusCode == 200, let meData = meData else {
+                DispatchQueue.main.async { self.isPromoterForEvent = false }
                 return
             }
-
-            // Print raw string for debugging
-            if let raw = String(data: data, encoding: .utf8) {
-                print("🧾 Raw response string:\n\(raw)")
+            if let ctype = http.value(forHTTPHeaderField: "Content-Type"),
+               !ctype.lowercased().contains("application/json") {
+                DispatchQueue.main.async { self.isPromoterForEvent = false }
+                return
             }
-
-            do {
-                struct PromoterStatsResponse: Decodable {
-                    let referralCode: String
+            struct PromoterMeDTO: Decodable {
+                let id: Int
+                let referralCode: String?
+                let user: InnerUser
+                struct InnerUser: Decodable { let id: Int; let username: String? }
+            }
+            guard let me = try? JSONDecoder().decode(PromoterMeDTO.self, from: meData) else {
+                DispatchQueue.main.async { self.isPromoterForEvent = false }
+                return
+            }
+            
+            // 2) /api/promoters/event/{eventId}/dashboard
+            var dashReq = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/api/promoters/event/\(self.event.id)/dashboard")!)
+            dashReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            
+            URLSession.shared.dataTask(with: dashReq) { dData, dResp, _ in
+                guard let http2 = dResp as? HTTPURLResponse, http2.statusCode == 200, let dData = dData else {
+                    DispatchQueue.main.async { self.isPromoterForEvent = false }
+                    return
+                }
+                if let ctype = http2.value(forHTTPHeaderField: "Content-Type"),
+                   !ctype.lowercased().contains("application/json") {
+                    DispatchQueue.main.async { self.isPromoterForEvent = false }
+                    return
+                }
+                
+                struct PromoterEventView: Decodable {
+                    struct PromoterSummary: Decodable { let id: Int }
+                    let id: Int
+                    let promoter: PromoterSummary
                     let ticketsSold: Int
-                    let buyers: [ReferredBuyerDTO]
                 }
-
-                let stats = try JSONDecoder().decode(PromoterStatsResponse.self, from: data)
-
-                DispatchQueue.main.async {
-                    self.isPromoterForEvent = true
-                    self.promoterStats = PromoterEvent(
-                        id: 0,
-                        ticketsSold: stats.ticketsSold,
-                        event: event,
-                        promoter: PromoterDTO(id: 0, referralCode: stats.referralCode, user: UserDTO(firstName: "", lastName: "", username: ""))
-                    )
-                    self.referredBuyers = stats.buyers
+                guard let rows = try? JSONDecoder().decode([PromoterEventView].self, from: dData) else {
+                    DispatchQueue.main.async { self.isPromoterForEvent = false }
+                    return
                 }
-
-            } catch {
-                // Fallback in case response is not JSON
-                let fallback = String(data: data, encoding: .utf8) ?? ""
-                if fallback.contains("not a promoter") {
-                    print("ℹ️ User is not a promoter — ignoring.")
+                if let mine = rows.first(where: { $0.promoter.id == me.id }) {
                     DispatchQueue.main.async {
-                        self.isPromoterForEvent = false
+                        self.isPromoterForEvent = true
+                        self.promoterStats = PromoterEvent(
+                            id: mine.id,
+                            ticketsSold: mine.ticketsSold,
+                            event: self.event,
+                            promoter: PromoterDTO(
+                                id: me.id,
+                                referralCode: me.user.username ?? me.referralCode ?? "",
+                                user: UserDTO(id: me.user.id,firstName: "", lastName: "", username: me.user.username ?? "")
+                            ), grossRevenue: nil
+                        )
                     }
                 } else {
-                    print("❌ JSON decode failed: \(error)")
+                    DispatchQueue.main.async { self.isPromoterForEvent = false }
                 }
-            }
+            }.resume()
         }.resume()
     }
-
-
-
 
     func refreshEvent() {
         guard let url = URL(string: "https://backendevent-etce.onrender.com/events/\(event.id)"),
@@ -595,21 +762,26 @@ struct EventDetailView: View {
 
     func prepareShareURL() {
         guard let token = TokenManager.shared.getAccessToken() else {
-            shareURL = URL(string: "http://localhost:3000/events/\(event.id)")
+            self.shareURL = URL(string: "https://wkndevent.com/#/events/\(event.id)")
             return
         }
-
-        var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/api/promoters/me")!)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { data, _, _ in
+        var req = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/api/promoters/me")!)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        URLSession.shared.dataTask(with: req) { data, _, _ in
             DispatchQueue.main.async {
-                if let data = data,
-                   let promoter = try? JSONDecoder().decode(Promoter.self, from: data) {
-                    let ref = promoter.user.username
-                    self.shareURL = URL(string: "http://localhost:3000/events/\(event.id)?ref=\(ref)")
+                struct Me: Decodable { struct U: Decodable { let username: String? }
+                    let referralCode: String?; let user: U
+                }
+                if let data, let me = try? JSONDecoder().decode(Me.self, from: data) {
+                    let ref = (me.referralCode) ?? (me.user.username)
+                    if let ref {
+                        self.shareURL = URL(string: "https://wkndevent.com/#/events/\(self.event.id)")
+                    } else {
+                        self.shareURL = URL(string: "https://wkndevent.com/#/events/\(self.event.id)")
+                    }
                 } else {
-                    self.shareURL = URL(string: "http://localhost:3000/events/\(event.id)")
+                    self.shareURL = URL(string: "https://wkndevent.com/#/events/\(self.event.id)")
                 }
             }
         }.resume()
@@ -637,8 +809,6 @@ struct ChatRoomDTO: Codable {
     let id: Int
 }
 
-
-
 // MARK: - Custom Wallet Button View
 struct WalletActionButton: View {
     let title: String
@@ -665,7 +835,7 @@ struct WalletActionButton: View {
     }
 }
 
-// MARK: - Ticket Card View
+// MARK: - Ticket Card View (fixed)
 struct TicketCardView: View {
     let ticket: TicketDTO
     let event: Event
@@ -676,7 +846,6 @@ struct TicketCardView: View {
     @State private var walletError: String?
     @State private var isLoading = false
 
-    // Cache passes per ticket in memory
     private static var passCache: [Int: PKPass] = [:]
 
     var body: some View {
@@ -684,7 +853,7 @@ struct TicketCardView: View {
             RoundedRectangle(cornerRadius: 28)
                 .fill(
                     LinearGradient(
-                        colors: [.deepNavy.opacity(0.96), .black.opacity(0.92)],
+                        colors: [Color.deepNavy.opacity(0.96), .black.opacity(0.92)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
@@ -692,16 +861,52 @@ struct TicketCardView: View {
                 .shadow(color: .gold.opacity(0.17), radius: 12, x: 0, y: 7)
 
             VStack(spacing: 20) {
-                // Tier & price
                 VStack(spacing: 12) {
-                    Text(ticket.tierName ?? "Ticket")
-                        .font(.title2.bold())
-                        .foregroundColor(.gold)
-                        .padding(.vertical, 4)
-                        .padding(.horizontal, 14)
-                        .background(Color.gold.opacity(0.08))
-                        .cornerRadius(12)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    HStack(spacing: 10) {
+                        Text(ticket.tierName ?? "Ticket")
+                            .font(.title2.bold())
+                            .foregroundColor(.gold)
+                            .padding(.vertical, 4)
+                            .padding(.horizontal, 14)
+                            .background(Color.gold.opacity(0.08))
+                            .cornerRadius(12)
+
+                        Spacer()
+
+                        if PKAddPassesViewController.canAddPasses() {
+                            Button(action: {
+                                if !isLoading { Task { await fetchAndPresentPass() } }
+                            }) {
+                                HStack(spacing: 6) {
+                                    if isLoading {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    } else {
+                                        Image(systemName: "wallet.pass")
+                                            .imageScale(.medium)
+                                    }
+                                    Text(isLoading
+                                         ? (lang == "es" ? "Añadiendo" : "Adding")
+                                         : (lang == "es" ? "Añadir a Wallet" : "Add to Wallet"))
+                                    .font(.subheadline.weight(.semibold))
+                                }
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 14)
+                                .background(Color.black)
+                                .foregroundColor(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .shadow(radius: 2)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(isLoading)
+                            .accessibilityLabel(lang == "es" ? "Añadir a Wallet" : "Add to Wallet")
+                        } else {
+                            Text(lang == "es" ? "Wallet no disponible" : "Wallet unavailable")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     HStack {
                         if let price = priceForTicket(ticket, in: event) {
@@ -722,38 +927,26 @@ struct TicketCardView: View {
                     }
                 }
 
-                // QR Code
-                ZStack {
-                    RoundedRectangle(cornerRadius: 18)
-                        .fill(Color.black.opacity(0.95))
-                        .frame(width: 220, height: 220)
-                    AsyncImage(url: URL(string: "https://backendevent-etce.onrender.com\(ticket.qrCodeUrl ?? "")")) { image in
-                        image.resizable().interpolation(.none).scaledToFit().frame(width: 180, height: 180)
-                    } placeholder: { ProgressView() }
+                if let token = TokenManager.shared.getAccessToken(),
+                   let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/qr/\(ticket.id)") {
+                    AuthImage(url: url, token: token, size: 220)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 18)
+                            .fill(Color.black.opacity(0.95))
+                            .frame(width: 220, height: 220)
+                        Text("No auth / bad URL")
+                            .foregroundColor(.red)
+                            .font(.footnote)
+                    }
                 }
 
-                // Ticket ID
                 HStack {
                     Label("Ticket #\(ticket.id)", systemImage: "ticket.fill")
                         .font(.subheadline.bold())
                         .foregroundColor(.white.opacity(0.89))
                 }
 
-                // Wallet button
-                if PKAddPassesViewController.canAddPasses() {
-                    WalletActionButton(
-                        title: isLoading ? (lang == "es" ? "Añadiendo..." : "Adding...") : (lang == "es" ? "Añadir a Wallet" : "Add to Wallet"),
-                        isLoading: isLoading
-                    ) {
-                        Task { await fetchAndPresentPass() }
-                    }
-                } else {
-                    Text(lang == "es" ? "Apple Wallet no disponible" : "Apple Wallet not available")
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                }
-
-                // Error
                 if let walletError {
                     Text(walletError)
                         .font(.footnote)
@@ -773,20 +966,18 @@ struct TicketCardView: View {
         }
     }
 
-    // MARK: - Fetch Pass
     private func fetchAndPresentPass() async {
-        // Use cached pass if available
         if let cached = Self.passCache[ticket.id] {
             self.pkPass = cached
             self.showAdd = true
-            UIImpactFeedbackGenerator(style: .light).impactOccurred() // ✅ haptic success
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             return
         }
 
         guard let token = TokenManager.shared.getAccessToken(),
               let url = URL(string: "https://backendevent-etce.onrender.com/api/passes/ticket/\(ticket.id)") else {
             await MainActor.run { walletError = "Missing auth or bad URL." }
-            UINotificationFeedbackGenerator().notificationOccurred(.error) // ❌ haptic error
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
             return
         }
 
@@ -798,31 +989,42 @@ struct TicketCardView: View {
         do {
             var req = URLRequest(url: url)
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            req.setValue("application/vnd.apple.pkpass", forHTTPHeaderField: "Accept")
 
+            let (rawData, resp) = try await URLSession.shared.data(for: req)
             guard let http = resp as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)
             }
 
-            let pass = try PKPass(data: data)
-            Self.passCache[ticket.id] = pass // ✅ store in cache
+            var passData = rawData
+
+            if let json = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any],
+               let b64 = json["pkpass"] as? String,
+               let decoded = Data(base64Encoded: b64) {
+                passData = decoded
+            }
+            else if let decoded = Data(base64Encoded: rawData) {
+                passData = decoded
+            }
+
+            let pass = try PKPass(data: passData)
+            Self.passCache[ticket.id] = pass
 
             await MainActor.run {
                 self.pkPass = pass
                 self.showAdd = true
-                UIImpactFeedbackGenerator(style: .light).impactOccurred() // ✅ haptic success
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         } catch {
             await MainActor.run {
                 walletError = "Wallet error: \(error.localizedDescription)"
-                UINotificationFeedbackGenerator().notificationOccurred(.error) // ❌ haptic error
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
             }
         }
 
         await MainActor.run { isLoading = false }
     }
 
-    // MARK: - Helpers
     func formattedDate(_ isoString: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
@@ -837,18 +1039,11 @@ struct TicketCardView: View {
     }
 }
 
-// MARK: - Wallet sheet wrapper
 struct WalletSheetWrapper: UIViewControllerRepresentable {
     let vc: UIViewController
     func makeUIViewController(context: Context) -> UIViewController { vc }
     func updateUIViewController(_ vc: UIViewController, context: Context) {}
 }
-
-
-
-
-
-
 
 struct IdentifiableCoordinate: Identifiable {
     let id = UUID()
@@ -863,4 +1058,115 @@ struct ActivityViewController: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+struct RemoteImageBox: View {
+    let urlString: String?
+    let fallbackImageName: String
+    let aspectRatio: CGFloat
+    let fill: Bool
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .fill(LinearGradient(colors: [.white.opacity(0.05), .white.opacity(0.02)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+
+            if let s = urlString, let url = URL(string: s), !s.isEmpty {
+                AsyncImage(url: url, transaction: .init(animation: .easeInOut)) { phase in
+                    switch phase {
+                    case .empty:
+                        ProgressView().tint(.white.opacity(0.9))
+                            .transition(.opacity)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: fill ? .fill : .fit)
+                            .transition(.opacity)
+                    case .failure:
+                        Image(fallbackImageName).resizable().scaledToFill()
+                            .transition(.opacity)
+                    @unknown default:
+                        Image(fallbackImageName).resizable().scaledToFill()
+                    }
+                }
+            } else {
+                Image(fallbackImageName).resizable().scaledToFill()
+            }
+        }
+        .aspectRatio(aspectRatio, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius)
+                .stroke(Color.white.opacity(0.06), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 5)
+        .contentShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+}
+
+// Lightweight attendee for the "Going" UI
+struct Attendee: Identifiable, Hashable, Codable {
+    let id: Int
+    let username: String?
+    let avatarUrl: String?
+}
+
+// Small reusable avatar
+private struct SmallAvatar: View {
+    let url: String?
+    let size: CGFloat
+    var body: some View {
+        ZStack {
+            Circle().fill(Color.white.opacity(0.08)).frame(width: size, height: size)
+            if let s = url, let u = URL(string: s) {
+                AsyncImage(url: u) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                            .frame(width: size, height: size).clipShape(Circle())
+                    case .empty: ProgressView().tint(.gold)
+                    case .failure: Image(systemName: "person.fill").foregroundStyle(Color.gold)
+                    @unknown default: EmptyView()
+                    }
+                }
+            } else {
+                Image(systemName: "person.fill").foregroundStyle(Color.gold)
+            }
+        }
+        .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+    }
+}
+
+// Overlapping stack (like Instagram)
+private struct OverlappingAvatarStack: View {
+    let attendees: [Attendee]
+    let maxCount: Int
+    let size: CGFloat
+    var body: some View {
+        HStack(spacing: -10) {
+            ForEach(Array(attendees.prefix(maxCount).enumerated()), id: \.offset) { _, u in
+                SmallAvatar(url: u.avatarUrl, size: size)
+                    .zIndex(Double(1000 - u.id))
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            }
+            if attendees.count > maxCount {
+                Text("+\(attendees.count - maxCount)")
+                    .font(.footnote.bold()).foregroundColor(.white.opacity(0.9))
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(Color.white.opacity(0.08))
+                    .clipShape(Capsule())
+                    .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+            }
+        }
+    }
+}
+
+// MARK: - Tiny convenience used in prepareShareURL()
+private extension Optional where Wrapped == String {
+    var nilIfBlank: String? {
+        guard let s = self, !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return s
+    }
 }

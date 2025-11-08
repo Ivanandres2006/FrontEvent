@@ -1,32 +1,43 @@
 import SwiftUI
+import AVFoundation
 
 struct TicketValidationView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
+
     @State private var scannedCode: String?
     @State private var resultColor: Color = .gray
     @State private var resultText: String = "Scan a QR code"
-    
+    @State private var isLoading = false
+
+    // we’ll use this to “restart” the scanner by changing the view identity
     @State private var shouldRestartScanner = false
 
     var body: some View {
         VStack(spacing: 20) {
-            QRScannerView { code in
-                self.scannedCode = code
-                validateTicket(code)
+            // Scanner
+            QRScannerView { raw in
+                scannedCode = raw
+                handleScan(raw)
             }
-            .restartScanner(shouldRestartScanner)
+            .id(shouldRestartScanner) // <— replaces .restartScanner(...)
             .frame(height: 300)
-            .cornerRadius(16)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
 
-            Text(resultText)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(resultColor)
-                .multilineTextAlignment(.center)
-                .padding()
+            // Result banner
+            HStack(spacing: 10) {
+                Circle().fill(resultColor).frame(width: 10, height: 10)
+                Text(resultText)
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+                Spacer()
+                if isLoading { ProgressView() }
+            }
+            .padding()
+            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.08)))
 
             if let scanned = scannedCode {
-                Text("Ticket ID: \(scanned)")
+                Text("\(lang == "es" ? "Último:" : "Last:") \(scanned)")
                     .foregroundColor(.white.opacity(0.6))
                     .font(.footnote)
             }
@@ -34,71 +45,122 @@ struct TicketValidationView: View {
             Spacer()
         }
         .padding()
-        .background(LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
+        .background(
+            LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
+        )
     }
 
-    private func validateTicket(_ code: String) {
-        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(code)") else { return }
+    // MARK: - Scan flow
+
+    private func handleScan(_ raw: String) {
+        isLoading = true
+
+        guard let ticketId = parseTicketId(from: raw) else {
+            isLoading = false
+            showBanner(text: lang == "es" ? "QR inválido" : "Invalid QR", color: .red)
+            softRestart()
+            return
+        }
+        validateTicket(ticketId)
+    }
+
+    /// Accepts plain "123" OR "TICKET:123:email"
+    private func parseTicketId(from code: String) -> Int? {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let id = Int(trimmed) { return id }
+        let parts = trimmed.split(separator: ":")
+        if parts.count >= 2, parts[0].uppercased() == "TICKET",
+           let id = Int(parts[1]) { return id }
+        return nil
+    }
+
+    private func validateTicket(_ ticketId: Int) {
+        guard
+            let token = TokenManager.shared.getAccessToken(),
+            let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(ticketId)")
+        else {
+            isLoading = false
+            showBanner(text: lang == "es" ? "Sesión inválida" : "Invalid session", color: .red)
+            softRestart()
+            return
+        }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(TokenManager.shared.getAccessToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        URLSession.shared.dataTask(with: request) { data, _, error in
+        URLSession.shared.dataTask(with: request) { data, response, _ in
             DispatchQueue.main.async {
-                if let data = data,
-                   let json = try? JSONDecoder().decode(ValidatedTicket.self, from: data) {
+                guard
+                    let http = response as? HTTPURLResponse, http.statusCode == 200,
+                    let data = data,
+                    let json = try? JSONDecoder().decode(ValidatedTicket.self, from: data)
+                else {
+                    self.isLoading = false
+                    self.showBanner(text: self.lang == "es" ? "Entrada inválida o no autorizada" : "Invalid or unauthorized ticket", color: .red)
+                    self.softRestart()
+                    return
+                }
 
-                    if json.used {
-                        resultColor = .red
-                        resultText = lang == "es"
-                            ? "❌ Entrada ya utilizada\nNivel: \(json.tier)"
-                            : "❌ Ticket already used\nTier: \(json.tier)"                    } else {
-                        markTicketAsUsed(ticketId: json.ticketId, tier: json.tier)
-                    }
+                if json.used {
+                    self.isLoading = false
+                    self.showBanner(
+                        text: self.lang == "es" ? "❌ Ya utilizada · Nivel: \(json.tier)" : "❌ Already used · Tier: \(json.tier)",
+                        color: .red
+                    )
+                    self.softRestart()
                 } else {
-                    resultColor = .red
-                    resultText = lang == "es"
-                        ? "Entrada inválida o no autorizada"
-                        : "Invalid or unauthorized ticket"                }
+                    self.markTicketAsUsed(ticketId: json.ticketId, tier: json.tier)
+                }
             }
         }.resume()
     }
 
     private func markTicketAsUsed(ticketId: Int, tier: String) {
-        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(ticketId)/mark-used") else { return }
+        guard
+            let token = TokenManager.shared.getAccessToken(),
+            let url = URL(string: "https://backendevent-etce.onrender.com/api/tickets/validate/\(ticketId)/mark-used")
+        else {
+            isLoading = false
+            showBanner(text: lang == "es" ? "Sesión inválida" : "Invalid session", color: .red)
+            softRestart()
+            return
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
-        request.setValue("Bearer \(TokenManager.shared.getAccessToken() ?? "")", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        URLSession.shared.dataTask(with: request) { data, _, error in
+        URLSession.shared.dataTask(with: request) { data, response, _ in
             DispatchQueue.main.async {
-                if let data = data,
-                   let response = try? JSONDecoder().decode(MarkUsedResponse.self, from: data),
-                   response.status == "Ticket marked as used" {
-                    resultColor = .green
-                    resultText = lang == "es"
-                        ? "✅ Entrada utilizada con éxito\nNivel: \(tier)"
-                        : "✅ Ticket used successfully\nTier: \(tier)"                } else {
-                    resultColor = .red
-                            resultText = lang == "es"
-                                ? "❌ No se pudo marcar la entrada como utilizada"
-                                : "❌ Failed to mark ticket as used"                }
+                self.isLoading = false
+                if let http = response as? HTTPURLResponse, http.statusCode == 200 {
+                    self.showBanner(
+                        text: self.lang == "es" ? "✅ Entrada escaneada · \(tier)" : "✅ Ticket scanned · \(tier)",
+                        color: .green
+                    )
+                } else {
+                    self.showBanner(
+                        text: self.lang == "es" ? "❌ No se pudo marcar como usada" : "❌ Failed to mark as used",
+                        color: .red
+                    )
+                }
+                self.softRestart()
             }
         }.resume()
     }
 
-    struct MarkUsedResponse: Decodable {
-        let status: String
+    private func showBanner(text: String, color: Color) {
+        self.resultText = text
+        self.resultColor = color
     }
-}
 
-struct ValidatedTicket: Decodable {
-    let ticketId: Int
-    let event: String
-    let tier: String
-    let quantity: Int
-    let status: String
-    let email: String
-    let used: Bool
+    /// Reset banner after a short delay and recreate the scanner view.
+    private func softRestart() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            self.resultText = "Scan a QR code"
+            self.resultColor = .gray
+            self.shouldRestartScanner.toggle() // forces QRScannerView recreation
+        }
+    }
 }

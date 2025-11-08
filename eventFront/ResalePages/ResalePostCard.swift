@@ -1,101 +1,64 @@
 import SwiftUI
 
 struct ResalePostCard: View {
-    @AppStorage("selectedLanguage") var lang: String = "en"
     let post: ResalePostDTO
-    var onMessage: () -> Void = {}
-    var onBuyNow: () -> Void = {}
+    var onMessage: () -> Void
+    var trailingSellerMenu: (() -> AnyView)? = nil
+    var onBuyNow: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 🎟 Event Image
-            ZStack {
-                if let imageUrl = post.eventImageUrl, let url = URL(string: imageUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            ProgressView()
-                                .frame(maxWidth: .infinity, maxHeight: 180)
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 180)
-                                .clipped()
-                        case .failure(_):
-                            fallbackImage
-                        @unknown default:
-                            fallbackImage
-                        }
+        VStack(alignment: .leading, spacing: 10) {
+            if let url = URL(string: post.eventImageUrl ?? "") {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img): img.resizable().scaledToFill()
+                    default: Color.white.opacity(0.06)
                     }
-                } else {
-                    fallbackImage
                 }
-            }
-            .frame(maxWidth: .infinity)
-            .cornerRadius(14)
-
-            // 📄 Post Info
-            VStack(alignment: .leading, spacing: 6) {
-                Text(post.title)
-                    .font(.headline)
-                    .foregroundColor(.white)
-
-                Text(post.eventTitle)
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.7))
-
-                HStack(spacing: 6) {
-                    Image(systemName: "person.crop.circle.fill")
-                        .foregroundColor(.white.opacity(0.4))
-                    Text(post.sellerName)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.5))
-                }
-
-                Text("$\(String(format: "%.2f", post.price))")
-                    .font(.title2.bold())
-                    .foregroundColor(.gold)
-                    .padding(.top, 4)
+                .frame(height: 160)
+                .clipped()
+                .cornerRadius(16)
             }
 
-            // 🔘 Actions
+            Text(post.title)
+                .foregroundColor(.white)
+                .font(.headline)
+
             HStack {
+                Text(post.eventTitle)
+                    .foregroundColor(.white.opacity(0.8))
+                Spacer()
+                Text(String(format: "$%.2f", post.price))
+                    .foregroundColor(.gold)
+                    .fontWeight(.bold)
+            }
+
+            HStack(spacing: 10) {
                 Button(action: onMessage) {
-                    Label(lang == "es" ? "Mensaje" : "Message", systemImage: "message.fill")
-                        .font(.subheadline.bold())
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right.fill")
+                        .padding(.vertical, 8).padding(.horizontal, 12)
+                        .background(Color.white.opacity(0.08))
                         .foregroundColor(.white)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 14)
-                        .background(Color.white.opacity(0.1))
                         .cornerRadius(10)
                 }
-
-                Spacer()
-
                 Button(action: onBuyNow) {
-                    Label(lang == "es" ? "Comprar Ahora" : "Buy Now", systemImage: "cart.fill")
-                        .font(.subheadline.bold())
-                        .foregroundColor(.black)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
+                    Label("Buy", systemImage: "creditcard.fill")
+                        .padding(.vertical, 8).padding(.horizontal, 12)
                         .background(Color.gold)
+                        .foregroundColor(.black)
                         .cornerRadius(10)
                 }
             }
-            .padding(.top, 6)
         }
         .padding()
-        .background(Color.white.opacity(0.04))
-        .cornerRadius(20)
-        .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
-    }
-
-    var fallbackImage: some View {
-        Image("defaultEvent")
-            .resizable()
-            .scaledToFill()
-            .frame(height: 180)
-            .clipped()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+        )
+        // Inside ResalePostCard view
+        .overlay(alignment: .topTrailing) {
+            if let trailingSellerMenu = trailingSellerMenu { trailingSellerMenu() }
+        }
     }
 }

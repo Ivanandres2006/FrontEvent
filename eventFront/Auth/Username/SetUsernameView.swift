@@ -15,6 +15,7 @@ struct SetUsernameView: View {
             ZStack {
                 LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom)
                     .ignoresSafeArea()
+                
 
                 VStack(spacing: 30) {
                     Spacer()

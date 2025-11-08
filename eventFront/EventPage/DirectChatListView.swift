@@ -59,15 +59,22 @@ struct DirectChatListView: View {
                 }
             }
             .fullScreenCover(item: $selectedChat) { summary in
-                ChatView(chatSummary: summary, currentUserId: userSession.userId)
+                ChatView(chatSummary: summary, currentUserId: Int(userSession.userId))
             }
             .onAppear {
-                print("🧪 Promoted Event IDs:", userSession.promotedEvents)
-                ensurePromoterChatsExist(for: userSession.promotedEvents)
+                // grab a value snapshot first (avoids any dynamicMember confusion)
+                let raw = userSession.promotedEvents  
+                // If your array is already [Int], this line is a no-op:
+                let ids: [Int] = raw.map { Int(truncatingIfNeeded: $0) } // works for Int/Int64
+
+                print("🧪 Promoted Event IDs:", ids)
+                ensurePromoterChatsExist(for: ids)
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                     fetchChats()
                 }
             }
+
         }
     }
 

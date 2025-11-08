@@ -13,5 +13,5 @@ struct ResalePostDTO: Identifiable, Codable {
     let sellerId: Int
     let eventId: Int?
     let sold: Bool  // ✅ NEW FIELD
-
+    let paused: Bool?          
 }

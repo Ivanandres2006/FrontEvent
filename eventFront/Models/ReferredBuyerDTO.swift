@@ -5,4 +5,7 @@ struct ReferredBuyerDTO: Codable, Identifiable {
     let username: String
     let email: String
     let timestamp: String
+    
+    let quantity: Int?
+    let unitPrice: Double?
 }

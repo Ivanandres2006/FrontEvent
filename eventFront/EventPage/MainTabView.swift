@@ -2,18 +2,29 @@ import SwiftUI
 
 struct MainTabView: View {
     @StateObject private var userSession = UserSession()
+    @StateObject private var badge = AppBadgeStore.shared
+
     @State private var allEvents: [Event] = []
     @State private var selectedTab = 0
     @AppStorage("selectedLanguage") var lang: String = "en"
     @State private var userActiveEventIds: Set<Int> = []
     @Binding var deepLinkEventId: String?
 
+    @State private var showNotifications = false
+    
+    // inside MainTabView
+    @State private var deepLinkResalePostId: Int? = nil
+    
+    @State private var selectedChatId: Int? = nil
+    @State private var showChat = false
+
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            // 🔘 Event List
+
+            // 🔘 Events
             NavigationStack {
-                EventListView(events: $allEvents, selectedTab: $selectedTab, deepLinkEventId: $deepLinkEventId) // <--
+                EventListView(events: $allEvents, selectedTab: $selectedTab, deepLinkEventId: $deepLinkEventId)
             }
             .tabItem {
                 Label(lang == "es" ? "Eventos" : "Events", systemImage: "calendar")
@@ -47,12 +58,23 @@ struct MainTabView: View {
             }
             .tag(3)
 
-            // 🛒 Resale Feed
+            // 🛒 Resale
             NavigationStack {
                 ResaleFeedView()
             }
             .tabItem {
-                Label(lang == "es" ? "Revender" : "Resale", systemImage: "dollarsign.circle.fill")
+                ZStack(alignment: .topTrailing) {
+                    Label(lang == "es" ? "Revender" : "Resale", systemImage: "dollarsign.circle.fill")
+                    if badge.pendingResale > 0 {
+                        Text("\(min(badge.pendingResale, 99))")
+                            .font(.system(size: 9, weight: .heavy))
+                            .foregroundColor(.black)
+                            .padding(4)
+                            .background(Color.gold)
+                            .clipShape(Circle())
+                            .offset(x: 18, y: -6)
+                    }
+                }
             }
             .tag(4)
         }
@@ -62,12 +84,41 @@ struct MainTabView: View {
             userSession.loadUser()
             fetchAllEventData()
         }
+        .onOpenURL { url in
+            if let link = AppDeepLink.parse(url: url) {
+                switch link {
+                case .resalePost(let id):
+                    selectedTab = 4 // jump to Resale tab
+                    deepLinkResalePostId = id
+                    NotificationCenter.default.post(name: .openResalePostFromLink, object: id)
+                }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openChatFromPush)) { notif in
+            if let chatIdStr = notif.object as? String,
+               let chatId = Int(chatIdStr) {
+                selectedChatId = chatId
+                showChat = true
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openNotificationsFromPush)) { _ in
+            showNotifications = true
+        }
+        .sheet(isPresented: $showNotifications) {
+            NavigationStack {
+                NotificationsView(initialTab: .activity)
+                    .environmentObject(userSession)
+                    .navigationTitle(lang == "es" ? "Notificaciones" : "Notifications")
+                    .navigationBarTitleDisplayMode(.inline)
+            }
+        }
     }
     
+
     func fetchAllEventData() {
         guard let token = TokenManager.shared.getAccessToken() else { return }
 
-        // Step 1: Fetch ticket-based event IDs
+        // 1) Tickets -> event IDs
         if let eventIdsUrl = URL(string: "https://backendevent-etce.onrender.com/api/tickets/my-event-ids") {
             var request = URLRequest(url: eventIdsUrl)
             request.httpMethod = "GET"
@@ -79,7 +130,7 @@ struct MainTabView: View {
                     DispatchQueue.main.async {
                         self.userActiveEventIds = Set(ids)
 
-                        // Step 2: Fetch RSVP-based IDs
+                        // 2) RSVP
                         if let rsvpUrl = URL(string: "https://backendevent-etce.onrender.com/events/rsvp-attending") {
                             var rsvpRequest = URLRequest(url: rsvpUrl)
                             rsvpRequest.httpMethod = "GET"
@@ -99,7 +150,7 @@ struct MainTabView: View {
             }.resume()
         }
 
-        // Step 3: Fetch all events
+        // 3) All events
         if let url = URL(string: "https://backendevent-etce.onrender.com/events?page=0&size=100") {
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
@@ -116,5 +167,4 @@ struct MainTabView: View {
             }.resume()
         }
     }
-
 }

@@ -12,8 +12,10 @@ struct TicketTier: Identifiable, Codable, Equatable, Hashable {
     let name: String
     let price: Double
     let availableQuantity: Int
+    let description: String?
     let tierOrder: Int?
     let startTime: Date?
+    let hideQuantity: Bool?   // 👈 NEW
     let endTime: Date?
     let forceOpen: Bool?
 }

@@ -1,123 +1,253 @@
-import UIKit
-import Firebase
+//
+//  AppDelegate.swift
+//  eventFront
+//
+
+import SwiftUI
+import FirebaseCore
 import FirebaseMessaging
 import UserNotifications
+import SwiftUI
+import UIKit
 import GooglePlaces
 
 
-class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
-    var userSession: UserSession? // <-- Will be injected from SwiftUI if you want
+struct EventFrontApp: App {
+    // AppDelegate hosts Firebase/UNUserNotificationCenter/Messaging plumbing
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
-    override init() {
-        super.init()
-        // Listen for userSession loaded (username ready)
-        NotificationCenter.default.addObserver(self, selector: #selector(userSessionLoaded(_:)), name: .userSessionLoaded, object: nil)
+    @State private var deepLinkEventId: String? = nil
+
+    var body: some Scene {
+        WindowGroup {
+            AppRootView(deepLinkEventId: $deepLinkEventId)
+                // (optional) handle custom URL deep links to set deepLinkEventId
+                .onOpenURL { url in
+                    if let id = DeepLinkParser.eventId(from: url) {
+                        deepLinkEventId = id
+                    }
+                }
+        }
     }
+}
 
+/// Tiny helper to parse your event deep links if you have them.
+enum DeepLinkParser {
+    static func eventId(from url: URL) -> String? {
+        // Example: wknd://event/123  → "123"
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard parts.count >= 2, parts[0].lowercased() == "event" else { return nil }
+        return parts[1]
+    }
+}
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
-        FirebaseApp.configure()
-        GMSPlacesClient.provideAPIKey("AIzaSyAsSjybISIywrdMNKMVrKrhgDIQdX1r4pA")
+        // 1) Configure Firebase early
+        if FirebaseApp.app() == nil { FirebaseApp.configure() }
+        
+        GMSPlacesClient.provideAPIKey("AIzaSyAsSjybISIywrdMNKMVrKrhgDIQdX1r4pA") // ← add this
+        // 2) Prepare push: center delegate + ask for permission then register for APNS
         UNUserNotificationCenter.current().delegate = self
+        requestPushAuthorizationAndRegister(for: application)
+
+        // 3) Hook FCM delegate
         Messaging.messaging().delegate = self
-
-        requestPushPermissions()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            Messaging.messaging().token { token, error in
-                if let error = error {
-                    print("❌ Error fetching token manually: \(error.localizedDescription)")
-                } else if let token = token {
-                    print("✅ Manual fetch FCM Token: \(token)")
-                }
-            }
-        }
 
         return true
     }
 
-    func requestPushPermissions() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            print("🔔 Notification permission granted: \(granted)")
-            if granted {
-                DispatchQueue.main.async {
-                    UIApplication.shared.registerForRemoteNotifications()
-                }
+    private func requestPushAuthorizationAndRegister(for application: UIApplication) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { _, _ in
+            // Register for APNS on main thread
+            DispatchQueue.main.async {
+                application.registerForRemoteNotifications()
             }
         }
     }
 
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+    // 4) APNS device token → pass to FCM (THIS fixes “no APNS token specified”)
+    func application(_ application: UIApplication,
+                     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
-        print("📦 APNs token received and set ✅")
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("❌ Failed to register for remote notifications: \(error.localizedDescription)")
-    }
-
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                willPresent notification: UNNotification,
-                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .sound, .badge])
-    }
-
-    func userNotificationCenter(_ center: UNUserNotificationCenter,
-                               didReceive response: UNNotificationResponse,
-                               withCompletionHandler completionHandler: @escaping () -> Void) {
-        let userInfo = response.notification.request.content.userInfo
-        if let eventId = userInfo["eventId"] as? String {
-            print("🔗 User tapped notification for event: \(eventId)")
-            NotificationCenter.default.post(name: Notification.Name("OpenEventFromNotification"), object: eventId)
-        }
-        completionHandler()
-    }
-
-    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        print("📱 FCM Token: \(fcmToken ?? "nil")")
-        guard let token = fcmToken else { return }
-
-        // Only send if username is available and valid
-        if let username = userSession?.username, !username.isEmpty, username != "unknown" {
-            registerFCMToken(token: token, username: username)
-        } else {
-            print("⏳ Username not ready for FCM registration. Waiting for UserSession.")
+        // (Optional) Immediately fetch FCM token now that APNS token is set
+        Messaging.messaging().token { token, error in
+            NotificationCenter.default.post(name: .fcmTokenUpdated, object: token)
+            if let token { PushTokenUploader.shared.updateIfNeeded(fcmToken: token) }
         }
     }
 
-    // Called when UserSession is loaded/refreshed and username is ready
-    @objc func userSessionLoaded(_ notification: Notification) {
-        guard let username = notification.object as? String, !username.isEmpty, username != "unknown" else { return }
-        guard let token = Messaging.messaging().fcmToken else {
-            print("❌ No FCM token available yet when username loaded")
-            return
-        }
-        registerFCMToken(token: token, username: username)
+    func application(_ application: UIApplication,
+                     didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("APNS register failed:", error.localizedDescription)
     }
+}
 
-    // Helper function to send FCM token with username
-    func registerFCMToken(token: String, username: String) {
-        guard let url = URL(string: "https://backendevent-etce.onrender.com/api/notifications/register") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body: [String: String] = ["token": token, "username": username]
-        do {
-            let jsonData = try JSONSerialization.data(withJSONObject: body)
-            request.httpBody = jsonData
-        } catch {
-            print("❌ Error encoding JSON token body: \(error.localizedDescription)")
-            return
+// MARK: UNUserNotificationCenterDelegate
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    // Foreground presentation
+        func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                    willPresent notification: UNNotification,
+                                    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+            // Show it
+            completionHandler([.banner, .sound, .badge])
+            
+            // Optional: also persist to Activity when received in foreground
+            persistToActivity(from: notification.request.content.userInfo)
         }
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                print("❌ Error sending token: \(error.localizedDescription)")
-            } else if let httpResponse = response as? HTTPURLResponse {
-                print("✅ Token sent with status: \(httpResponse.statusCode)")
-                if let data = data, let responseBody = String(data: data, encoding: .utf8) {
-                    print("🔁 Response body: \(responseBody)")
+
+        // User tapped a notification
+        func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                    didReceive response: UNNotificationResponse,
+                                    withCompletionHandler completionHandler: @escaping () -> Void) {
+            let userInfo = response.notification.request.content.userInfo
+            
+            // 1) Deep links (your existing logic)
+            if let type = userInfo["type"] as? String {
+                if type == "CHAT", let chatId = valueAsString(userInfo["chatId"]) {
+                    NotificationCenter.default.post(name: .openChatFromPush, object: chatId)
+                } else if type == "EVENT", let eventId = valueAsString(userInfo["eventId"]) {
+                    NotificationCenter.default.post(name: .openEventFromPush, object: eventId)
                 }
             }
-        }.resume()
+            
+            // 2) Persist to local Activity
+            persistToActivity(from: userInfo)
+            
+            completionHandler()
+        }
+
+        // MARK: - Normalize + persist
+    private func persistToActivity(from userInfo: [AnyHashable: Any]) {
+        // Type
+        let rawType = (userInfo["type"] as? String)
+        ?? (userInfo["notificationType"] as? String)
+        ?? (userInfo["category"] as? String)
+        ?? "PUSH"
+        
+        // Actor id (int from Int/String/NSNumber)
+        let actorId: Int = valueAsInt(userInfo["actorId"])
+        ?? valueAsInt(userInfo["userId"])
+        ?? -1
+        
+        // Username / display
+        let username = (userInfo["username"] as? String)
+        ?? (userInfo["handle"] as? String)
+        ?? "user"
+        let displayName = (userInfo["displayName"] as? String)
+        ?? (userInfo["name"] as? String)
+        
+        // Avatar / thumb
+        let avatarUrl = (userInfo["avatarUrl"] as? String)
+        ?? (userInfo["avatar"] as? String)
+        var entityThumb = (userInfo["entityThumb"] as? String)
+        ?? (userInfo["thumbUrl"] as? String)
+        ?? (userInfo["coverUrl"] as? String)
+        ?? (userInfo["imageUrl"] as? String)
+        
+        // Target entity id (event/post/chat/etc.)
+        let entityId: Int? = valueAsInt(userInfo["entityId"])
+        ?? valueAsInt(userInfo["targetId"])
+        ?? valueAsInt(userInfo["photoId"])
+        ?? valueAsInt(userInfo["eventId"])
+        ?? valueAsInt(userInfo["chatId"])
+        ?? valueAsInt(userInfo["postId"])
+        
+        // Pull some fallback bits from APS
+        if let aps = userInfo["aps"] as? [String: Any] {
+            if entityThumb == nil, let thumb = aps["entityThumb"] as? String {
+                entityThumb = thumb
+            }
+            // If your provider puts a title in APS, you can use it as a displayName fallback:
+            if displayName == nil,
+               let alert = aps["alert"] as? [String: Any],
+               let title = alert["title"] as? String,
+               !title.isEmpty {
+                // not stored separately; just an example if you want to override
+            }
+        }
+        
+        let item = ActivityItem(
+            type: rawType,
+            actorId: actorId,
+            username: username,
+            displayName: displayName,
+            avatarUrl: avatarUrl,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            entityId: entityId,
+            entityThumb: entityThumb
+        )
+        
+        LocalActivityStore.insert(item)
+        NotificationCenter.default.post(name: .newActivitySaved, object: nil)
+    }
+
+        // MARK: - Small helpers to coerce Any to Int/String safely
+    private func valueAsInt(_ any: Any?) -> Int? {
+        switch any {
+        case let n as NSNumber: return n.intValue
+        case let i as Int:      return i
+        case let s as String:   return Int(s)
+        default:                return nil
+        }
+    }
+    private func valueAsString(_ any: Any?) -> String? {
+        switch any {
+        case let s as String:   return s
+        case let n as NSNumber: return n.stringValue
+        case let i as Int:      return String(i)
+        default:                return nil
+        }
+    }
+
+
+    
+    func applicationWillEnterForeground(_ application: UIApplication) {
+        ChatAPI.shared.fetchUnreadCount { count in
+            DispatchQueue.main.async {
+                UIApplication.shared.applicationIconBadgeNumber = count
+            }
+        }
+    }
+
+}
+
+// MARK: MessagingDelegate
+extension AppDelegate: MessagingDelegate {
+    // FCM token is ready or refreshed
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        NotificationCenter.default.post(name: .fcmTokenUpdated, object: fcmToken)
+        if let fcmToken { PushTokenUploader.shared.updateIfNeeded(fcmToken: fcmToken) }
+    }
+}
+
+extension Notification.Name {
+    static let fcmTokenUpdated    = Notification.Name("fcmTokenUpdated")
+    static let openChatFromPush   = Notification.Name("openChatFromPush")
+    static let openEventFromPush  = Notification.Name("openEventFromPush")
+    static let newActivitySaved = Notification.Name("newActivitySaved")
+    static let chatListNeedsRefresh = Notification.Name("chatListNeedsRefresh")
+    static let openBuyFromOffer = Notification.Name("openBuyFromOffer")
+    static let offerMarkedSold = Notification.Name("offerMarkedSold")
+    
+}
+
+
+/// Replace the backend call inside `send(_:)` with your existing API.
+final class PushTokenUploader {
+    static let shared = PushTokenUploader()
+    private var lastSent: String?
+
+    func updateIfNeeded(fcmToken: String) {
+        guard lastSent != fcmToken else { return }
+        lastSent = fcmToken
+        send(fcmToken)
+    }
+
+    private func send(_ token: String) {
+        // TODO: call your backend to save token for current user.
+        // e.g. ProfileAPI.shared.updatePushToken(token)
+        print("✅ FCM token ready:", token)
     }
 }

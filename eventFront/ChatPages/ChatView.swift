@@ -1,29 +1,25 @@
 import SwiftUI
+import UIKit
 
-struct CounterOffer: Identifiable {
-    let id = UUID()
-    var amount: Double
-}
+// MARK: - Lightweight models / helpers used here
 
-struct UploadResponse: Codable {
-    let filename: String
-}
+struct CounterOffer: Identifiable { let id = UUID(); var amount: Double }
+struct UploadResponse: Codable { let filename: String }
 
 extension Data {
     mutating func append(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
-        }
+        if let data = string.data(using: .utf8) { append(data) }
     }
 }
+
+// MARK: - ChatView
 
 struct ChatView: View {
     @AppStorage("selectedLanguage") var lang: String = "en"
     let chatSummary: ChatRoomSummary
     let currentUserId: Int
-    @State private var chatRoomId: Int? = nil
-    
 
+    @State private var chatRoomId: Int? = nil
     @State private var messages: [ChatMessage] = []
     @State private var newMessage = ""
     @State private var showCustomActionSheet = false
@@ -33,22 +29,17 @@ struct ChatView: View {
     @State private var counterOfferText = ""
     @State private var selectedImageURL: IdentifiableURL? = nil
     @State private var activeAcceptedOffer: AcceptedOffer? = nil
-    
+
     @State private var loadedEvent: Event? = nil
-    
     @EnvironmentObject var userSession: UserSession
+
     @State private var paymentComplete = false
     @State private var resalePostSold = false
-    
     @State private var fullResalePost: ResalePostDTO? = nil
     @State private var renderTrigger = UUID()
-    
-    @State private var isSendingCounter = false
-    
     @State private var isSendingCounterOffer = false
+
     @Environment(\.dismiss) var dismiss
-
-
 
     var body: some View {
         VStack(spacing: 0) {
@@ -56,7 +47,7 @@ struct ChatView: View {
             Divider()
             messagesScrollView
             if showCustomActionSheet { actionSheet }
-            
+
             Group {
                 if loadedEvent != nil || chatSummary.type == "DIRECT" || chatSummary.type == "PROMOTER_GROUP" {
                     if isEventInPast {
@@ -68,40 +59,34 @@ struct ChatView: View {
                     } else {
                         messageInputBar
                     }
-                } else {
-                    EmptyView()
                 }
             }
         }
         .background(LinearGradient(colors: [.black, .deepNavy], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
         .onAppear {
             chatRoomId = chatSummary.chatRoomId
-                fetchMessages()
+            fetchMessages()
 
-                // 💡 Only fetch resale post if resalePostId exists
             if let resalePostId = chatSummary.resalePostId {
+                // 🔧 FIX: use local helper implemented below
                 fetchPostById(postId: resalePostId) { post in
                     if let post = post {
                         self.fullResalePost = post
                         self.paymentComplete = post.sold
-                        self.fetchEventDetails(eventId: post.eventId!)
-                    } else {
-                        print("❌ Could not load resale post")
+                        if let eventId = post.eventId { self.fetchEventDetails(eventId: eventId) }
                     }
                 }
             } else {
-                print("ℹ️ This is an event-based chat (not resale).")
                 self.paymentComplete = true
                 if let eventId = chatSummary.eventId {
                     self.fetchEventDetails(eventId: Int(eventId))
                 } else {
-                    // Direct or admin chat — no event data required
-                    self.loadedEvent = Event(id: -1, title: "Direct Chat") // Dummy event to trigger UI
+                    self.loadedEvent = Event(id: -1, title: "Direct Chat") // dummy to show input bar
                 }
             }
-            print("📲 Chat screen loaded with chatRoomId:", chatRoomId ?? -1)
-            print("🎉 paymentComplete =", paymentComplete)
-                Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in fetchMessages() }
+
+            // refresh every 5s
+            Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in fetchMessages() }
         }
         .sheet(item: $selectedImageURL) { viewer in fullScreenImage(url: viewer.url) }
         .sheet(isPresented: $showImagePicker) {
@@ -115,63 +100,51 @@ struct ChatView: View {
                     resalePost: post,
                     event: .constant(event),
                     userEmail: userSession.email,
-                    
-    onComplete: {
-        fetchPostById(postId: offer.resalePostId) { latest in
-            if let latest = latest {
-                self.fullResalePost = latest
-                self.paymentComplete = latest.sold
-                self.renderTrigger = UUID()
-                print("✅ Payment status updated: sold =", latest.sold)
-            }
-        }
-    }
-    
+                    onComplete: {
+                        // 🔧 FIX: use local helper implemented below
+                        fetchPostById(postId: offer.resalePostId) { latest in
+                            if let latest = latest {
+                                self.fullResalePost = latest
+                                self.paymentComplete = latest.sold
+                                self.renderTrigger = UUID()
+                            }
+                        }
+                    }
                 )
             } else {
                 Text(lang == "es" ? "Cargando..." : "Loading...")
             }
         }
+        
         .alert(lang == "es" ? "Enviar Contraoferta" : "Send Counteroffer", isPresented: $showCounterOfferPrompt) {
-            let hasPending = messages.contains {
-                $0.senderId == currentUserId && $0.offerId != nil && $0.status == "PENDING"
-            }
-
+            let hasPending = messages.contains { $0.senderId == currentUserId && $0.offerId != nil && $0.status == "PENDING" }
             if !hasPending {
                 TextField(lang == "es" ? "Tu precio (ej. 15)" : "Your price (e.g. 15)", text: $counterOfferText)
-                Button(lang == "es" ? "Enviar" : "Send") {
-                    sendCounterOffer()
-                }.disabled(isSendingCounterOffer)
+                Button(lang == "es" ? "Enviar" : "Send") { sendCounterOffer() }
+                .disabled(isSendingCounterOffer)
             } else {
                 Button("OK", role: .cancel) { }
             }
         } message: {
-            let hasPending = messages.contains {
-                $0.senderId == currentUserId && $0.offerId != nil && $0.status == "PENDING"
-            }
-
+            let hasPending = messages.contains { $0.senderId == currentUserId && $0.offerId != nil && $0.status == "PENDING" }
             Text(
                 hasPending
-                    ? (lang == "es"
-                        ? "Ya enviaste una contraoferta. Espera a que sea aceptada o rechazada."
-                        : "You already sent a counteroffer. Please wait until it is accepted or declined.")
-                    : (lang == "es"
-                        ? "Propón un nuevo precio al vendedor."
-                        : "Propose a new price to the seller.")
+                ? (lang == "es" ? "Ya enviaste una contraoferta. Espera a que sea aceptada o rechazada."
+                                 : "You already sent a counteroffer. Please wait.")
+                : (lang == "es" ? "Propón un nuevo precio al vendedor." : "Propose a new price to the seller.")
             )
         }
     }
 
+    // MARK: Header
+
     var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            Button(action: {
-                dismiss()
-            }) {
+            Button { dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white)
             }
-
             VStack(alignment: .leading, spacing: 4) {
                 Text(chatSummary.title)
                     .font(.title3.bold())
@@ -181,17 +154,16 @@ struct ChatView: View {
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.7))
             }
-
             Spacer()
         }
-        .padding(.top, 60) // Adjust for notch
+        .padding(.top, 60)
         .padding(.horizontal)
         .padding(.bottom, 12)
         .background(Color.black.opacity(0.7))
     }
 
-
     // MARK: Messages
+
     var messagesScrollView: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -201,28 +173,25 @@ struct ChatView: View {
                 .padding(.top, 10)
             }
             .onChange(of: messages.count) { _ in
-                withAnimation {
-                    proxy.scrollTo(messages.last?.id, anchor: .bottom)
-                }
+                withAnimation { proxy.scrollTo(messages.last?.id, anchor: .bottom) }
             }
         }
     }
-    
+
     var pastEventNotice: some View {
         Text(
             lang == "es"
-                ? "⚠️ Este evento ya ocurrió. Inicia un nuevo chat para un evento futuro."
-                : "⚠️ This event has already happened. Start a new chat for a future event."
+            ? "⚠️ Este evento ya ocurrió. Inicia un nuevo chat para un evento futuro."
+            : "⚠️ This event has already happened. Start a new chat for a future event."
         )
-            .multilineTextAlignment(.center)
-            .foregroundColor(.white.opacity(0.7))
-            .padding()
-            .background(Color.black.opacity(0.3))
-            .cornerRadius(12)
-            .padding(.horizontal)
-            .padding(.bottom, 12)
+        .multilineTextAlignment(.center)
+        .foregroundColor(.white.opacity(0.7))
+        .padding()
+        .background(Color.black.opacity(0.3))
+        .cornerRadius(12)
+        .padding(.horizontal)
+        .padding(.bottom, 12)
     }
-
 
     func messageView(_ msg: ChatMessage) -> some View {
         HStack {
@@ -237,11 +206,11 @@ struct ChatView: View {
         .padding(.horizontal)
         .id(msg.id)
     }
-    
+
     func getSubtitleText() -> String {
         if chatSummary.type == "RESALE" {
             return lang == "es"
-            ? "Hablando con \(chatSummary.sellerName ?? "usuario")"
+                ? "Hablando con \(chatSummary.sellerName ?? "usuario")"
                 : "Talking with \(chatSummary.sellerName ?? "user")"
         } else if chatSummary.type == "DIRECT" {
             if userSession.role == "ADMIN" {
@@ -249,53 +218,27 @@ struct ChatView: View {
                     ? "Hablando con \(chatSummary.otherUsername ?? "usuario")"
                     : "Talking with \(chatSummary.otherUsername ?? "user")"
             } else {
-                return lang == "es"
-                    ? "Hablando con Admin"
-                    : "Talking with Admin"
+                return lang == "es" ? "Hablando con Admin" : "Talking with Admin"
             }
         } else {
             return lang == "es" ? "Chat" : "Chat"
         }
     }
 
-
-func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
-    guard let id = msg.offerId else { return false }
-    return messages.last(where: {
-        $0.offerId != nil && $0.status == "PENDING" && $0.senderId == currentUserId
-    })?.offerId == id
-}
-    
-    func fetchFullResalePost(postId: Int, completion: @escaping (ResalePostDTO?) -> Void) {
-        guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/resale/available") else {
-            completion(nil)
-            return
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data,
-                  let decoded = try? JSONDecoder().decode([ResalePostDTO].self, from: data) else {
-                completion(nil)
-                return
-            }
-
-            let match = decoded.first { $0.id == postId }
-            DispatchQueue.main.async {
-                completion(match)
-            }
-        }.resume()
+    func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
+        guard let id = msg.offerId else { return false }
+        return messages.last(where: {
+            $0.offerId != nil && $0.status == "PENDING" && $0.senderId == currentUserId
+        })?.offerId == id
     }
 
-
+    // MARK: Bubble
 
     @ViewBuilder
     func messageBubble(_ msg: ChatMessage, isCurrentUser: Bool) -> some View {
         VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 6) {
+
+            // Image message
             if let imageName = extractImageFilename(msg.content),
                let url = URL(string: "https://backendevent-etce.onrender.com/api/chat/image/\(imageName)") {
                 AsyncImage(url: url) { phase in
@@ -304,20 +247,20 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                     case .success(let image): imageBubble(image: image, url: url)
                     case .failure: Image(systemName: "photo.fill").foregroundColor(.gray)
                     @unknown default: EmptyView()
-    }
+                    }
                 }
+
+            // Accepted offer
             } else if let offer = parseAcceptedOffer(msg.content) {
                 VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 8) {
                     if currentUserId == chatSummary.buyerId {
-                        // 🎟️ Buyer sees Buy Now
-
                         Text(
                             lang == "es"
-                                ? "✅ Oferta Aceptada por $\(String(format: "%.2f", offer.price))"
-                                : "✅ Offer Accepted for $\(String(format: "%.2f", offer.price))"
+                            ? "✅ Oferta Aceptada por $\(String(format: "%.2f", offer.price))"
+                            : "✅ Offer Accepted for $\(String(format: "%.2f", offer.price))"
                         )
                         .foregroundColor(.white)
-                            .font(.subheadline)
+                        .font(.subheadline)
 
                         if paymentComplete {
                             HStack {
@@ -329,11 +272,11 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                         } else {
                             Button(lang == "es" ? "Comprar Ahora" : "Buy Now") {
                                 fetchFullResalePost(postId: offer.resalePostId) { post in
-                                       if let post = post {
-                                           self.fullResalePost = post
-                                           self.activeAcceptedOffer = offer
-                                       }
-                                   }
+                                    if let post = post {
+                                        self.fullResalePost = post
+                                        self.activeAcceptedOffer = offer
+                                    }
+                                }
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
@@ -343,15 +286,12 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                         }
 
                     } else {
-                        // 👑 Seller sees confirmation message
                         HStack {
-                            Image(systemName: "checkmark.square.fill")
-                                .foregroundColor(.green)
-
+                            Image(systemName: "checkmark.square.fill").foregroundColor(.green)
                             Text(
                                 lang == "es"
-                                    ? "Aceptaste la oferta: $\(String(format: "%.2f", offer.price))"
-                                    : "You accepted the offer: $\(String(format: "%.2f", offer.price))"
+                                ? "Aceptaste la oferta: $\(String(format: "%.2f", offer.price))"
+                                : "You accepted the offer: $\(String(format: "%.2f", offer.price))"
                             )
                         }
                         .font(.subheadline)
@@ -362,17 +302,18 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                 .background(Color.white.opacity(0.05))
                 .cornerRadius(12)
                 .frame(maxWidth: 280, alignment: isCurrentUser ? .trailing : .leading)
+
+            // Counteroffer
             } else if let amount = msg.amount, let offerId = msg.offerId {
                 VStack(alignment: .leading, spacing: 8) {
-                    // 💲 Card with amount
+                    // amount card
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Image(systemName: "tag.fill")
-                                .foregroundColor(.gold)
+                            Image(systemName: "tag.fill").foregroundColor(.gold)
                             Text(
                                 lang == "es"
-                                    ? "Contraoferta: $\(String(format: "%.2f", amount))"
-                                    : "Counteroffer: $\(String(format: "%.2f", amount))"
+                                ? "Contraoferta: $\(String(format: "%.2f", amount))"
+                                : "Counteroffer: $\(String(format: "%.2f", amount))"
                             )
                             .font(.subheadline.bold())
                         }
@@ -381,58 +322,46 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                         .background(
                             RoundedRectangle(cornerRadius: 14)
                                 .fill(isCurrentUser ? Color.neonGreen : Color.white.opacity(0.08))
-                                .shadow(radius: 2)
                         )
                         .foregroundColor(isCurrentUser ? .black : .white)
                     }
 
-                    // 🔁 Logic based on status
                     switch msg.status {
                     case "PENDING":
                         if !isCurrentUser && currentUserId != chatSummary.buyerId {
-                            // Owner (seller) sees accept/decline
                             HStack(spacing: 12) {
-                                Button(lang == "es" ? "Aceptar" : "Accept") {
-                                    acceptCounterOffer(offerId: offerId)
-                                }
-                                .buttonStyleSmall(color: .gold, textColor: .black)
+                                Button(lang == "es" ? "Aceptar" : "Accept") { acceptCounterOffer(offerId: offerId) }
+                                    // 🔧 FIX: pass explicit Color.* here (resolves inference error)
+                                    .buttonStyleSmall(color: Color.gold, textColor: Color.black)
 
-                                Button(lang == "es" ? "Rechazar" : "Decline") {
-                                    declineCounterOffer(offerId: offerId)
-                                }
-                                .buttonStyleSmall(color: .red, textColor: .white)
+                                Button(lang == "es" ? "Rechazar" : "Decline") { declineCounterOffer(offerId: offerId) }
+                                    .buttonStyleSmall(color: Color.red, textColor: Color.white)
                             }
                         } else if isCurrentUser && isLastPendingOffer(msg) {
                             HStack(spacing: 4) {
-                                Image(systemName: "hourglass")
-                                Text(lang == "es" ? "Esperando una respuesta..." : "Waiting for an answer...")
+                                Image(systemName: "hourglass"); Text(lang == "es" ? "Esperando..." : "Waiting...")
                             }
-                            .font(.caption2)
-                            .foregroundColor(.gray)
+                            .font(.caption2).foregroundColor(.gray)
                         }
 
                     case "ACCEPTED":
                         Text(lang == "es" ? "✅ Tu oferta fue aceptada." : "✅ Your offer was accepted.")
-                            .font(.caption2)
-                            .foregroundColor(.green)
+                            .font(.caption2).foregroundColor(.green)
 
                     case "DECLINED":
                         Text(lang == "es" ? "❌ Tu oferta fue rechazada." : "❌ Your offer was declined.")
-                            .font(.caption2)
-                            .foregroundColor(.red)
+                            .font(.caption2).foregroundColor(.red)
 
-                    default:
-                        EmptyView()
+                    default: EmptyView()
                     }
                 }
                 .frame(maxWidth: 280, alignment: isCurrentUser ? .trailing : .leading)
+
+            // Plain text
             } else {
                 VStack(alignment: isCurrentUser ? .trailing : .leading, spacing: 4) {
                     if chatSummary.title == "Promoter Group Chat", let name = msg.senderName, !isCurrentUser {
-                        Text(name)
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                            .padding(.horizontal, 8)
+                        Text(name).font(.caption2).foregroundColor(.gray).padding(.horizontal, 8)
                     }
 
                     Text(msg.content)
@@ -451,32 +380,33 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         }
         .id(renderTrigger)
     }
-    
-    func checkIfResalePostIsSold() {
-        guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/resale/\(chatSummary.resalePostId)") else { return }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "GET"
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+    // MARK: Networking helpers used by this view only
 
-        URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data,
-                  let decoded = try? JSONDecoder().decode(ResalePostDTO.self, from: data) else {
-                print("❌ Failed to decode resale post")
-                return
-            }
-            DispatchQueue.main.async {
-                resalePostSold = decoded.sold
-            }
-        }.resume()
-    }
-
+    /// 🔧 FIX: add single-post fetcher used in onAppear and BuyNow completion
     func fetchPostById(postId: Int, completion: @escaping (ResalePostDTO?) -> Void) {
         guard let token = TokenManager.shared.getAccessToken(),
               let url = URL(string: "https://backendevent-etce.onrender.com/resale/\(postId)") else {
-            completion(nil)
-            return
+            completion(nil); return
+        }
+        var r = URLRequest(url: url)
+        r.httpMethod = "GET"
+        r.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        URLSession.shared.dataTask(with: r) { data, _, _ in
+            guard let data = data,
+                  let post = try? JSONDecoder().decode(ResalePostDTO.self, from: data) else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            DispatchQueue.main.async { completion(post) }
+        }.resume()
+    }
+
+    /// Existing “list then match” fetch (kept for the BuyNow quick-open path)
+    func fetchFullResalePost(postId: Int, completion: @escaping (ResalePostDTO?) -> Void) {
+        guard let token = TokenManager.shared.getAccessToken(),
+              let url = URL(string: "https://backendevent-etce.onrender.com/resale/available") else {
+            completion(nil); return
         }
 
         var request = URLRequest(url: url)
@@ -485,17 +415,14 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
             guard let data = data,
-                  let post = try? JSONDecoder().decode(ResalePostDTO.self, from: data) else {
-                completion(nil)
+                  let decoded = try? JSONDecoder().decode([ResalePostDTO].self, from: data) else {
+                DispatchQueue.main.async { completion(nil) }
                 return
             }
-
-            DispatchQueue.main.async {
-                completion(post)
-            }
+            let match = decoded.first { $0.id == postId }
+            DispatchQueue.main.async { completion(match) }
         }.resume()
     }
-
 
     func imageBubble(image: Image, url: URL) -> some View {
         image.resizable()
@@ -503,17 +430,12 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
             .frame(width: 200, height: 160)
             .clipped()
             .cornerRadius(12)
-            .onTapGesture {
-                selectedImageURL = IdentifiableURL(url: url)
-            }
+            .onTapGesture { selectedImageURL = IdentifiableURL(url: url) }
     }
-    
+
     func fetchEventDetails(eventId: Int) {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)") else {
-            print("❌ Missing token or invalid event URL")
-            return
-        }
+              let url = URL(string: "https://backendevent-etce.onrender.com/events/\(eventId)") else { return }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
@@ -522,17 +444,13 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         URLSession.shared.dataTask(with: request) { data, _, _ in
             if let data = data,
                let fetchedEvent = try? JSONDecoder().decode(Event.self, from: data) {
-                DispatchQueue.main.async {
-                    print("✅ Loaded event: \(fetchedEvent.title)")
-                    self.loadedEvent = fetchedEvent
-                }
-            } else {
-                print("❌ Failed to load event")
+                DispatchQueue.main.async { self.loadedEvent = fetchedEvent }
             }
         }.resume()
     }
 
     // MARK: Input
+
     var messageInputBar: some View {
         HStack(spacing: 10) {
             Button { withAnimation { showCustomActionSheet.toggle() } } label: {
@@ -545,22 +463,20 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                 .foregroundColor(.white)
                 .cornerRadius(10)
 
-            Button(action: {
-                sendMessage(content: newMessage)
-            }) {
+            Button { sendMessage(content: newMessage) } label: {
                 Image(systemName: "paperplane.fill")
                     .foregroundColor(.gold)
                     .padding(10)
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(10)
             }
-
         }
         .padding(.horizontal)
         .padding(.bottom, 12)
     }
 
     // MARK: Actions
+
     var actionSheet: some View {
         VStack(spacing: 12) {
             HStack {
@@ -578,13 +494,11 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                 }
             }
 
-            // ✅ ADMIN ONLY: Grant Event Creation Permission
+            // Admin utility
             if userSession.role == "ADMIN" {
                 actionButton("✅ Grant Event Permission", color: .gold, textColor: .black) {
                     if let otherUserId = chatSummary.otherUserId {
                         grantEventPermission(to: otherUserId)
-
-                        // ✅ Only send message if recipient is not the current user (admin)
                         if otherUserId != currentUserId {
                             sendMessage(content: "✅ You now have permission to create events.")
                         }
@@ -600,21 +514,11 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         .transition(.move(edge: .bottom))
     }
 
-    
     var isEventInPast: Bool {
-        // 🛡️ Never consider direct or promoter group chats as past
-        if chatSummary.type.uppercased() == "DIRECT" || chatSummary.type.uppercased() == "PROMOTER_GROUP" {
-            return false
-        }
-
-        // 🛡️ If event is missing or malformed, default to not past
+        if chatSummary.type.uppercased() == "DIRECT" || chatSummary.type.uppercased() == "PROMOTER_GROUP" { return false }
         guard let eventDate = loadedEvent?.dateAsDate else { return false }
-
         return eventDate < Date()
     }
-
-
-
 
     func actionButton(_ title: String, color: Color = Color.white.opacity(0.08), textColor: Color = .white, action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -627,23 +531,17 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                 .cornerRadius(10)
         }
     }
-    
+
     func grantEventPermission(to userId: Int) {
         guard let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/admin/user/\(userId)/permission?allow=true") else {
-            print("❌ Invalid token or URL for grant permission")
-            return
-        }
-
+              let url = URL(string: "https://backendevent-etce.onrender.com/admin/user/\(userId)/permission?allow=true") else { return }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-
         URLSession.shared.dataTask(with: request) { _, _, _ in
             print("✅ Granted permission to user \(userId)")
         }.resume()
     }
-
 
     func fullScreenImage(url: URL) -> some View {
         ZStack {
@@ -653,17 +551,14 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
                 case .empty: ProgressView()
                 case .success(let image): image.resizable().scaledToFit()
                 case .failure:
-                    Text(lang == "es" ? "Error al cargar la imagen" : "Failed to load image")
-                        .foregroundColor(.white)
+                    Text(lang == "es" ? "Error al cargar la imagen" : "Failed to load image").foregroundColor(.white)
                 @unknown default: EmptyView()
                 }
             }
             VStack {
                 HStack {
                     Spacer()
-                    Button {
-                        selectedImageURL = nil
-                    } label: {
+                    Button { selectedImageURL = nil } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 28))
                             .foregroundColor(.white)
@@ -676,6 +571,7 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
     }
 
     // MARK: Networking
+
     func sendMessage(content: String) {
         guard !content.trimmingCharacters(in: .whitespaces).isEmpty,
               let chatRoomId = chatRoomId,
@@ -699,8 +595,6 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
             }
         }.resume()
     }
-
-
 
     func uploadImage(_ image: UIImage) {
         guard let token = TokenManager.shared.getAccessToken(),
@@ -727,10 +621,8 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         URLSession.shared.uploadTask(with: request, from: body) { data, _, _ in
             guard let data = data,
                   let response = try? JSONDecoder().decode(UploadResponse.self, from: data) else { return }
-
             DispatchQueue.main.async {
-                newMessage = "[img]\(response.filename)"
-                sendMessage(content: newMessage)
+                sendMessage(content: "[img]\(response.filename)")
             }
         }.resume()
     }
@@ -741,9 +633,7 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
               price > 0,
               let chatRoomId = chatRoomId,
               let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/chat/\(chatRoomId)/counteroffer") else {
-            return
-        }
+              let url = URL(string: "https://backendevent-etce.onrender.com/chat/\(chatRoomId)/counteroffer") else { return }
 
         isSendingCounterOffer = true
         counterOfferText = ""
@@ -762,16 +652,8 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         }.resume()
     }
 
-
-
-
-    func acceptCounterOffer(offerId: Int) {
-        sendOfferAction(endpoint: "accept", offerId: offerId)
-    }
-
-    func declineCounterOffer(offerId: Int) {
-        sendOfferAction(endpoint: "decline", offerId: offerId)
-    }
+    func acceptCounterOffer(offerId: Int) { sendOfferAction(endpoint: "accept", offerId: offerId) }
+    func declineCounterOffer(offerId: Int) { sendOfferAction(endpoint: "decline", offerId: offerId) }
 
     func sendOfferAction(endpoint: String, offerId: Int) {
         guard let token = TokenManager.shared.getAccessToken(),
@@ -781,44 +663,36 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-        URLSession.shared.dataTask(with: request) { _, _, _ in fetchMessages() }.resume()
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            fetchMessages()
+        }.resume()
     }
 
     func fetchMessages() {
         guard let chatRoomId = chatRoomId,
               let token = TokenManager.shared.getAccessToken(),
-              let url = URL(string: "https://backendevent-etce.onrender.com/chat/\(chatRoomId)/messages") else {
-            print("❌ chatRoomId or token missing")
-            return
-        }
+              let url = URL(string: "https://backendevent-etce.onrender.com/chat/\(chatRoomId)/messages") else { return }
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
         URLSession.shared.dataTask(with: request) { data, _, _ in
-            guard let data = data else {
-                print("❌ No data from fetchMessages")
-                return
-            }
-
-            do {
-                let decoded = try JSONDecoder().decode([ChatMessage].self, from: data)
-                DispatchQueue.main.async {
-                    self.messages = decoded
-                }
-            } catch {
-                print("❌ Failed to decode messages:", error.localizedDescription)
+            guard let data = data else { return }
+            if let decoded = try? JSONDecoder().decode([ChatMessage].self, from: data) {
+                DispatchQueue.main.async { self.messages = decoded }
             }
         }.resume()
     }
+
     // MARK: Utility
+
     func formattedTime(_ timestamp: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
         if let date = formatter.date(from: timestamp) {
-            let displayFormatter = DateFormatter()
-            displayFormatter.dateFormat = "h:mm a"
-            return displayFormatter.string(from: date)
+            let display = DateFormatter()
+            display.dateFormat = "h:mm a"
+            return display.string(from: date)
         }
         return "..."
     }
@@ -837,16 +711,8 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         return AcceptedOffer(resalePostId: postId, price: price)
     }
 
-    struct IdentifiableURL: Identifiable {
-        let id = UUID()
-        let url: URL
-    }
-
-    struct AcceptedOffer: Identifiable {
-        let id = UUID()
-        let resalePostId: Int
-        let price: Double
-    }
+    struct IdentifiableURL: Identifiable { let id = UUID(); let url: URL }
+    struct AcceptedOffer: Identifiable { let id = UUID(); let resalePostId: Int; let price: Double }
 
     struct ChatMessage: Identifiable, Codable {
         var id: Int
@@ -858,13 +724,12 @@ func isLastPendingOffer(_ msg: ChatMessage) -> Bool {
         var status: String?
         var senderName: String?
     }
-    
-    struct MessagePayload: Codable {
-        let content: String
-    }
+
+    struct MessagePayload: Codable { let content: String }
 }
 
-// MARK: - Button Modifier
+// MARK: - Small button style (🔧 re-added)
+
 extension View {
     func buttonStyleSmall(color: Color, textColor: Color) -> some View {
         self.padding(.horizontal)

@@ -55,29 +55,49 @@ class TokenManager {
     }
 
     /// Attempts to refresh the token
+    // TokenManager.swift
     func refreshIfNeeded(completion: @escaping (Bool) -> Void) {
         guard let refreshToken = getRefreshToken() else {
-            completion(false)
-            return
+            completion(false); return
         }
 
         var request = URLRequest(url: URL(string: "https://backendevent-etce.onrender.com/auth/refresh")!)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = ["refreshToken": refreshToken]
-        request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 15   // ⏱️
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["refreshToken": refreshToken])
 
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let newAccess = json["accessToken"] as? String,
-                  let newRefresh = json["refreshToken"] as? String else {
-                completion(false)
-                return
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            // Always finish one way or another
+            guard error == nil, let http = response as? HTTPURLResponse, let data = data else {
+                print("🔴 refresh error:", error?.localizedDescription ?? "nil")
+                completion(false); return
             }
-
+            guard (200..<300).contains(http.statusCode) else {
+                let raw = String(data: data, encoding: .utf8) ?? ""
+                print("🔴 refresh non-2xx:", http.statusCode, raw)
+                completion(false); return
+            }
+            guard
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let newAccess = json["accessToken"] as? String,
+                let newRefresh = json["refreshToken"] as? String
+            else {
+                print("🔴 refresh bad JSON")
+                completion(false); return
+            }
             self.save(access: newAccess, refresh: newRefresh)
             completion(true)
         }.resume()
+    }
+    
+    func normalizedAccessToken() -> String? {
+        guard let t = getAccessToken() else { return nil }
+        if t.hasPrefix("Bearer ") { return String(t.dropFirst(7)) }
+        return t
+    }
+    
+    var token: String? {
+        getAccessToken()
     }
 }

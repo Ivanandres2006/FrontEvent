@@ -114,7 +114,7 @@ struct MyEventsView: View {
         var matching: [Event] = []
 
         for event in allEvents {
-            let byId = event.createdBy?.id == userSession.userId
+            let byId = event.createdBy?.id ?? 0 == userSession.userId
             let byEmail = event.createdByEmail?.lowercased() == userSession.email.lowercased()
             let isReunionGuest = (event.type == "reunion") &&
                 (event.reunionGuests?.contains(where: {
@@ -139,7 +139,7 @@ struct MyEventsView: View {
     private func pastCreatedEvents() -> [Event] {
         let now = Date()
         return allEvents.filter {
-            ($0.createdBy?.id == userSession.userId) ||
+            ($0.createdBy?.id ?? 0 == userSession.userId) ||
             ($0.createdByEmail?.lowercased() == userSession.email.lowercased())
             && ($0.dateAsDate ?? now) < now
         }

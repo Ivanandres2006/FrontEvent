@@ -24,4 +24,6 @@ extension Color {
     static let coral = Color(red: 251 / 255, green: 113 / 255, blue: 133 / 255) // #FB7185
     static let aqua = Color(red: 6 / 255, green: 182 / 255, blue: 212 / 255) // #06B6D4
     static let gold = Color(red: 238 / 255, green: 213 / 255, blue: 10 / 255) // #EED50A
+    static let neonGold   = Color(red: 1.00, green: 0.82, blue: 0.20)
+    static let cardBG     = Color.white.opacity(0.06)
 }

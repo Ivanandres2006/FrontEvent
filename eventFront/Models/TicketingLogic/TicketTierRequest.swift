@@ -13,7 +13,9 @@ struct TicketTierRequest: Identifiable, Hashable {
     var price: Double
     var quantity: Int
     let order: Int
+    let description: String?
     let startTime: Date?
+    let hideQuantity: Bool?   // 👈 NEW
     let endTime: Date?
     var forceOpen: Bool = false
 }

@@ -1,14 +1,16 @@
-struct AdminUser: Identifiable, Codable {
+import Foundation
+
+// Models used by the admin dashboard (match AdminController DTOs)
+struct AdminUser: Identifiable, Decodable {
     let id: Int
     let email: String
     let firstName: String
     let lastName: String
-    let role: String
     var canCreateEvents: Bool
+    var role: String? = nil        // backend doesn’t send role; keep optional
 }
 
-
-struct AdminEvent: Identifiable, Codable {
+struct AdminEvent: Identifiable, Decodable {
     let id: Int
     let title: String
     let location: String
@@ -17,16 +19,13 @@ struct AdminEvent: Identifiable, Codable {
     let totalRevenue: Double
 }
 
-
-struct AdminResalePost: Identifiable, Codable {
+struct AdminResalePost: Identifiable, Decodable {
     let id: Int
-    let ticketId: Int
-    let price: Double
     let title: String
     let description: String?
-    let sellerName: String?
-    let eventTitle: String?
-    let eventImageUrl: String?
+    let price: Double?
+    let sold: Bool?
+    let ticketId: Int?
+    let sellerEmail: String?
+    let createdAt: String?         // keep String to avoid date decode issues
 }
-
-

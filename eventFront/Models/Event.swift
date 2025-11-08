@@ -35,12 +35,18 @@ struct Event: Identifiable, Codable {
     var purchasedTickets: [TicketDTO] = []  // ✅ Local-only, not decoded from backend
 
     var dateAsDate: Date? {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0) // ✅ parse as UTC
-        return formatter.date(from: dateTime)
-    }
+            let s = self.dateTime /* adjust property name if different */
+            let isoFrac = ISO8601DateFormatter()
+            isoFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let d = isoFrac.date(from: s) { return d }
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime]
+            if let d = iso.date(from: s) { return d }
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+            return f.date(from: s)
+        }
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, location, address, state, country,
@@ -54,7 +60,7 @@ struct Event: Identifiable, Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(Int.self, forKey: .id)
         title = try container.decode(String.self, forKey: .title)
-        description = try container.decode(String.self, forKey: .description)
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
         location = try container.decode(String.self, forKey: .location)
         address = try container.decode(String.self, forKey: .address)
         state = try container.decode(String.self, forKey: .state)
